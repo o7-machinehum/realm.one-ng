@@ -29,6 +29,10 @@ public:
 
     void update(float dt);
     void draw(Vector2 originPx) const;
+    void setGridPos(float x, float y) {
+        gridX_ = x;
+        gridY_ = y;
+    }
 
     Vector2 worldPosPx() const { return worldPosPx_; }
     Vector2 gridPos() const { return Vector2{(float)gridX_, (float)gridY_}; }

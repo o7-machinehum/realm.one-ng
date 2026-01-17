@@ -1,0 +1,4 @@
+password=ryan1234
+room=d1
+x=10
+y=8

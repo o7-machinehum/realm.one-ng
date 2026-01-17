@@ -1,39 +1,18 @@
 // src/main.cpp
 #include <raylib.h>
+#include <enet/enet.h>
 
-#include <atomic>
 #include <cctype>
-#include <deque>
 #include <iostream>
-#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
-#include <thread>
 
 #include "sprites.h"
 #include "room.h"
 #include "character.h"
 #include "text_input.h"
-
-// ------------------ stdin command queue ------------------
-class CommandQueue {
-public:
-    void push(std::string cmd) {
-        std::lock_guard<std::mutex> lk(m_);
-        q_.push_back(std::move(cmd));
-    }
-    std::optional<std::string> try_pop() {
-        std::lock_guard<std::mutex> lk(m_);
-        if (q_.empty()) return std::nullopt;
-        auto cmd = std::move(q_.front());
-        q_.pop_front();
-        return cmd;
-    }
-private:
-    std::mutex m_;
-    std::deque<std::string> q_;
-};
+#include "client_net.h"
 
 static std::string trim(std::string s) {
     auto is_space = [](unsigned char c){ return std::isspace(c); };
@@ -43,70 +22,165 @@ static std::string trim(std::string s) {
 }
 
 int main() {
-    // ---- Terminal command thread setup ----
-    CommandQueue cmdq;
-    std::atomic<bool> running{true};
+    // ---- ENet init ----
+    if (enet_initialize() != 0) {
+        std::cerr << "enet_initialize failed\n";
+        return 1;
+    }
 
-    // ---- Raylib window ----
+    // ---- Window ----
     const int screenW = 960;
     const int screenH = 905;
-    InitWindow(screenW, screenH, "quick_game");
+    InitWindow(screenW, screenH, "quick_game_client");
     SetTargetFPS(60);
 
-    // ---- Load sprites + room ----
+    // ---- Assets (client-side art only) ----
     SpriteAtlas atlas;
-    std::string status;
-
     if (!atlas.loadDirectory("game/assets/art")) {
-        status = "Failed to load sprites from game/assets/art";
-        std::cerr << status << "\n";
-    } else {
-        status = "Loaded sprites from game/assets/art";
+        std::cerr << "Failed to load sprites from game/assets/art\n";
     }
 
+    // Start with a local room until server sends one (optional)
     Room room;
-    if (!room.loadFromFile("game/map/d1.tmx")) {
-        status = "Failed to load room game/map/d1.tmx";
-        std::cerr << status << "\n";
-    } else {
-        status = "Loaded room game/map/d1.tmx";
-    }
+    room.loadFromFile("game/map/d1.tmx");
 
-    // ---- Character ----
-    // top tile id 0 is "F" in your character.tsx example.
+    // Character: we only DRAW it now; position is authoritative from server STATE.
     Character guy(/*topTileId=*/0, /*startWorldPx=*/Vector2{16.0f * 5, 16.0f * 5});
 
-    // ---- Camera (world pixels) ----
+    // Simple placeholder texture (in case not authed / no state yet)
+    Image ph = GenImageChecked(16, 16, 4, 4, BLUE, SKYBLUE);
+    Texture2D placeholder = LoadTextureFromImage(ph);
+    UnloadImage(ph);
+
     Vector2 cam{0, 0};
 
     TextInput ui;
+    ClientNet net;
 
-    // ---- Main loop ----
-    while (!WindowShouldClose() && running.load(std::memory_order_relaxed)) {
-        ui.update(GetFrameTime());
+    ui.pushLog("Commands:");
+    ui.pushLog("  /connect <ip>");
+    ui.pushLog("  /create <name> <pass>");
+    ui.pushLog("  /identify <name> <pass>");
+    ui.pushLog("  /logout");
+
+    bool haveServerRoom = false;
+    bool haveServerState = false;
+
+    while (!WindowShouldClose()) {
+        const float dt = GetFrameTime();
+        (void)dt;
+
+        // ---- Network: tick FIRST ----
+        net.tick();
+
+        // ---- UI ----
+        ui.update(dt);
+
         if (auto cmd = ui.pollSubmitted()) {
-            std::cout << *cmd << std::endl;
+            const std::string line = trim(*cmd);
+            if (!line.empty()) {
+                ui.pushLog("> " + line);
+
+                std::istringstream iss(line);
+                std::string c;
+                iss >> c;
+
+                if (c == "/connect") {
+                    std::string ip;
+                    iss >> ip;
+                    if (ip.empty()) {
+                        ui.pushLog("Usage: /connect <ip>");
+                    } else {
+                        ui.pushLog("Connecting to " + ip + ":7777 ...");
+                        if (!net.connectTo(ip, 7777)) ui.pushLog("connectTo() failed");
+                    }
+                } else if (c == "/create") {
+                    std::string name, pass;
+                    iss >> name >> pass;
+                    if (name.empty() || pass.empty()) ui.pushLog("Usage: /create <name> <pass>");
+                    else if (!net.connected()) ui.pushLog("Not connected. Use /connect first.");
+                    else net.sendLine("CREATE " + name + " " + pass);
+                } else if (c == "/identify") {
+                    std::string name, pass;
+                    iss >> name >> pass;
+                    if (name.empty() || pass.empty()) ui.pushLog("Usage: /identify <name> <pass>");
+                    else if (!net.connected()) ui.pushLog("Not connected. Use /connect first.");
+                    else {
+                        std::cout << "Identifing\n";
+                        net.sendLine("IDENTIFY " + name + " " + pass);
+                    }
+                } else if (c == "/logout") {
+                    if (!net.connected()) ui.pushLog("Not connected.");
+                    else net.sendLine("LOGOUT");
+                } else {
+                    ui.pushLog("Unknown command: " + c);
+                }
+            }
         }
 
-        const float dt = GetFrameTime();
+        if (auto s = net.takeStatusLine()) ui.pushLog(*s);
 
-        // character movement (WASD uses IsKeyPressed inside Character)
-        if (!ui.isOpen()) guy.update(dt);
+        if (auto tmx = net.takeRoomTmx()) {
+            // TMX arrived over network; baseDir is only for resolving TSX relative paths.
+            // Your TMX uses ../assets/art/... so "game/map" makes it resolve to game/assets/art.
+            if (room.loadFromXmlString(*tmx, "game/map")) {
+                ui.pushLog("Loaded room from server");
+                haveServerRoom = true;
+            } else {
+                ui.pushLog("ERROR: could not parse server room; keeping current room");
+            }
+        }
 
+        // Apply authoritative server position (this is what makes your guy move!)
+        if (net.connected() && net.authed()) {
+            guy.setGridPos(net.myX(), net.myY());
+            haveServerState = true;
+        }
+
+        // ---- Input: send MOVE when authed ----
+        if (!ui.isOpen() && net.connected() && net.authed()) {
+            if (IsKeyPressed(KEY_A)) net.sendLine("MOVE L");
+            if (IsKeyPressed(KEY_D)) net.sendLine("MOVE R");
+            if (IsKeyPressed(KEY_W)) net.sendLine("MOVE U");
+            if (IsKeyPressed(KEY_S)) net.sendLine("MOVE D");
+        }
+        guy.update(dt);
+
+        // ---- Draw ----
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
         room.draw(atlas, Vector2{-cam.x, -cam.y});
-        guy.draw(Vector2{-cam.x, -cam.y});
-        ui.draw(GetScreenWidth(), GetScreenHeight());
 
+        // Other players (placeholder)
+        if (net.connected() && net.authed()) {
+            const float tile = 16.0f;
+            for (const auto& p : net.others()) {
+                float x = (float)p.x * tile - cam.x;
+                float y = (float)p.y * tile - cam.y;
+                DrawTextureEx(placeholder, Vector2{x, y}, 0.0f, 2.0f, WHITE);
+                DrawText(p.name.c_str(), (int)x, (int)(y - 14), 12, DARKBLUE);
+            }
+        }
+
+        // Me
+        if (net.connected() && net.authed() && haveServerState) {
+            guy.draw(Vector2{-cam.x, -cam.y});
+        } else {
+            // Not authed yet: draw a base image so you see *something*
+            DrawText("Not logged in yet. /create or /identify", 20, 20, 18, DARKGRAY);
+            DrawTextureEx(placeholder, Vector2{16.0f * 5 - cam.x, 16.0f * 5 - cam.y}, 0.0f, 2.0f, WHITE);
+        }
+
+        if (haveServerRoom) DrawText("Room: server authoritative", 20, 44, 14, GRAY);
+
+        ui.draw(GetScreenWidth(), GetScreenHeight());
         EndDrawing();
     }
 
-    // ---- Shutdown ----
-    running.store(false, std::memory_order_relaxed);
-
-    if (IsWindowReady()) CloseWindow();
+    UnloadTexture(placeholder);
+    CloseWindow();
+    enet_deinitialize();
     return 0;
 }
 
