@@ -14,6 +14,7 @@ add_executable(quick_game
   src/sprites.cpp
   src/room.cpp
   src/character.cpp
+  src/text_input.cpp
 )
 
 target_link_libraries(quick_game PRIVATE raylib)

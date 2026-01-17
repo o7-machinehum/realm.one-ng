@@ -14,6 +14,7 @@
 #include "sprites.h"
 #include "room.h"
 #include "character.h"
+#include "text_input.h"
 
 // ------------------ stdin command queue ------------------
 class CommandQueue {
@@ -46,17 +47,9 @@ int main() {
     CommandQueue cmdq;
     std::atomic<bool> running{true};
 
-    std::thread stdinThread([&](){
-        std::string line;
-        while (running.load(std::memory_order_relaxed) && std::getline(std::cin, line)) {
-            line = trim(line);
-            if (!line.empty()) cmdq.push(line);
-        }
-    });
-
     // ---- Raylib window ----
     const int screenW = 960;
-    const int screenH = 540;
+    const int screenH = 905;
     InitWindow(screenW, screenH, "quick_game");
     SetTargetFPS(60);
 
@@ -86,81 +79,32 @@ int main() {
     // ---- Camera (world pixels) ----
     Vector2 cam{0, 0};
 
-    auto handleCommand = [&](const std::string& cmdLine){
-        std::istringstream iss(cmdLine);
-        std::string cmd;
-        iss >> cmd;
-
-        if (cmd == "help") {
-            status = "Commands: help | reload | cam <x> <y> | quit";
-            std::cout << "Commands:\n"
-                      << "  help\n"
-                      << "  reload\n"
-                      << "  cam <x> <y>\n"
-                      << "  quit\n";
-        } else if (cmd == "cam") {
-            float x, y;
-            if (iss >> x >> y) {
-                cam = {x, y};
-                status = "cam = (" + std::to_string((int)x) + "," + std::to_string((int)y) + ")";
-            } else {
-                status = "Usage: cam <x> <y>";
-            }
-        } else if (cmd == "reload") {
-            // reload sprites + room (character reload is separate; keep it simple)
-            atlas.loadDirectory("game/assets/art");
-            if (room.loadFromFile("game/map/d1.tmx")) status = "Reloaded room + sprites";
-            else status = "Reload failed (see stderr)";
-        } else if (cmd == "quit" || cmd == "exit") {
-            status = "Quitting...";
-            running.store(false, std::memory_order_relaxed);
-            CloseWindow();
-        } else {
-            status = "Unknown: " + cmdLine + " (try help)";
-        }
-    };
+    TextInput ui;
 
     // ---- Main loop ----
     while (!WindowShouldClose() && running.load(std::memory_order_relaxed)) {
-        // terminal commands
-        while (auto cmd = cmdq.try_pop()) handleCommand(*cmd);
+        ui.update(GetFrameTime());
+        if (auto cmd = ui.pollSubmitted()) {
+            std::cout << *cmd << std::endl;
+        }
 
         const float dt = GetFrameTime();
 
-        // optional camera movement (arrow keys)
-        const float camSpeed = 300.0f;
-        if (IsKeyDown(KEY_RIGHT)) cam.x += camSpeed * dt;
-        if (IsKeyDown(KEY_LEFT))  cam.x -= camSpeed * dt;
-        if (IsKeyDown(KEY_DOWN))  cam.y += camSpeed * dt;
-        if (IsKeyDown(KEY_UP))    cam.y -= camSpeed * dt;
-
         // character movement (WASD uses IsKeyPressed inside Character)
-        guy.update(dt);
+        if (!ui.isOpen()) guy.update(dt);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        DrawText(status.c_str(), 20, 20, 18, DARKGRAY);
-        DrawText("terminal: help | reload | cam x y | quit", 20, 45, 18, GRAY);
-
-        // NOTE:
-        // If your Room::draw is already scaled 2x, and Character also scales 2x internally,
-        // then they won't match. Pick ONE scaling approach.
-        //
-        // Current assumption:
-        //  - Room::draw is NOT scaled internally (draws 1x world pixels)
-        //  - Character draws scaled 2x internally (cfg.scale default 2.0)
-        //
-        // If you already scaled Room to 2x, set Character::Config{.scale=1.0f} when constructing guy.
         room.draw(atlas, Vector2{-cam.x, -cam.y});
         guy.draw(Vector2{-cam.x, -cam.y});
+        ui.draw(GetScreenWidth(), GetScreenHeight());
 
         EndDrawing();
     }
 
     // ---- Shutdown ----
     running.store(false, std::memory_order_relaxed);
-    if (stdinThread.joinable()) stdinThread.join();
 
     if (IsWindowReady()) CloseWindow();
     return 0;
