@@ -40,6 +40,8 @@ int main() {
         std::cerr << "Failed to load sprites from game/assets/art\n";
     }
 
+    auto cover = LoadTexture("game/assets/img/cover.png");
+
     // Start with a local room until server sends one (optional)
     Room room;
     room.loadFromFile("game/map/d1.tmx");
@@ -66,6 +68,8 @@ int main() {
     bool haveServerRoom = false;
     bool haveServerState = false;
 
+    net.connectTo("127.0.0.1", 7777);
+    net.sendLine("IDENTIFY ryan ryan1234");
     while (!WindowShouldClose()) {
         const float dt = GetFrameTime();
         (void)dt;
@@ -105,10 +109,7 @@ int main() {
                     iss >> name >> pass;
                     if (name.empty() || pass.empty()) ui.pushLog("Usage: /identify <name> <pass>");
                     else if (!net.connected()) ui.pushLog("Not connected. Use /connect first.");
-                    else {
-                        std::cout << "Identifing\n";
-                        net.sendLine("IDENTIFY " + name + " " + pass);
-                    }
+                    else net.sendLine("IDENTIFY " + name + " " + pass);
                 } else if (c == "/logout") {
                     if (!net.connected()) ui.pushLog("Not connected.");
                     else net.sendLine("LOGOUT");
@@ -163,13 +164,14 @@ int main() {
             }
         }
 
+
         // Me
         if (net.connected() && net.authed() && haveServerState) {
             guy.draw(Vector2{-cam.x, -cam.y});
         } else {
             // Not authed yet: draw a base image so you see *something*
             DrawText("Not logged in yet. /create or /identify", 20, 20, 18, DARKGRAY);
-            DrawTextureEx(placeholder, Vector2{16.0f * 5 - cam.x, 16.0f * 5 - cam.y}, 0.0f, 2.0f, WHITE);
+            DrawTextureEx(cover, Vector2{0,0}, 0.0f, 2.0f, WHITE);
         }
 
         if (haveServerRoom) DrawText("Room: server authoritative", 20, 44, 14, GRAY);
