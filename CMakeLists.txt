@@ -19,6 +19,7 @@ target_link_libraries(qg_common PUBLIC enet)
 add_executable(test
   src/test.cpp
   src/sprites.cpp
+  src/entity.cpp
 )
 
 target_link_libraries(test PRIVATE raylib tinyxml2::tinyxml2 qg_common)

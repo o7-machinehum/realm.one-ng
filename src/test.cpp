@@ -1,6 +1,7 @@
 // main.cpp
 #include "raylib.h"
 #include "sprites.h"
+#include "entity.h"
 
 #include <iostream>
 #include <string>
@@ -11,6 +12,7 @@ int main()
     SetTargetFPS(60);
 
     Sprites sprites;
+    Entities entities;
     if (!sprites.loadTSX("game/assets/art/character.tsx")) return 1;
     sprites.debug_dump();
 
@@ -32,6 +34,10 @@ int main()
     const float frameTime = 0.12f; // seconds per frame
     const float scale = 2.0f;
 
+    entities.create(sprites.get("player_1"), 0, 0);
+    entities.create(sprites.get("player_1"), 10, 10);
+    entities.create(sprites.get("player_1"), 20, 20);
+
     while (!WindowShouldClose())
     {
         float dt = GetFrameTime();
@@ -46,8 +52,6 @@ int main()
         const Frame* fr = sprites.frame("player_1", Dir::S, frameIndex);
 
         Rectangle src = fr->rect();
-        Rectangle dst = { feetX, feetY, src.width * scale, src.height * scale };
-        Vector2 origin = { dst.width / 2.0f, dst.height };
 
         BeginDrawing();
         ClearBackground(DARKGRAY);
@@ -56,7 +60,10 @@ int main()
         for (int y = 0; y < 600; y += 16) DrawLine(0, y, 800, y, Fade(WHITE, 0.2f));
         for (int x = 0; x < 800; x += 16) DrawLine(x, 0, x, 600, Fade(WHITE, 0.2f));
 
-        DrawTexturePro(tex, src, dst, origin, 0.0f, WHITE);
+        for(auto& [uid, e] : entities.all()) {
+            auto map = e.get_map();
+            DrawTexturePro(tex, map.src, map.dst, map.orig, 0.0f, WHITE);
+        }
 
         EndDrawing();
     }
