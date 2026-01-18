@@ -1,4 +1,3 @@
-
 // character.h
 #pragma once
 

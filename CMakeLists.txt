@@ -13,21 +13,12 @@ add_library(qg_common STATIC
 )
 
 target_include_directories(qg_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(qg_common PUBLIC enet)  # <- literally -lenet
+target_link_libraries(qg_common PUBLIC enet)
 
-add_executable(quick_game_client
-  src/main.cpp
+
+add_executable(test
+  src/test.cpp
   src/sprites.cpp
-  src/room.cpp
-  src/character.cpp
-  src/client_net.cpp
 )
-target_link_libraries(quick_game_client PRIVATE raylib tinyxml2::tinyxml2 qg_common enet)
 
-add_executable(quick_game_server
-  src/server_main.cpp
-  src/server_net.cpp
-  src/fs_db.cpp
-)
-target_link_libraries(quick_game_server PRIVATE qg_common enet)
-
+target_link_libraries(test PRIVATE raylib tinyxml2::tinyxml2 qg_common)

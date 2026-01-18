@@ -1,39 +1,71 @@
+// sprites.h
 #pragma once
 
-#include <raylib.h>
 #include <string>
 #include <unordered_map>
-#include <filesystem>
+#include <vector>
 
-struct SpriteTileset {
-    std::string name;                 // from TSX <tileset name="...">
-    std::filesystem::path tsxPath;    // full path to .tsx
-    std::filesystem::path pngPath;    // resolved from TSX <image source="...">
-    int tileW = 0;
-    int tileH = 0;
-    int columns = 0;
+#include "raylib.h" // Rectangle
 
-    Texture2D texture{};
-    bool loaded = false;
-};
+enum class Dir : unsigned char { N, E, S, W };
 
-class SpriteAtlas {
+class Frame {
 public:
-    SpriteAtlas() = default;
-    ~SpriteAtlas();
+    Frame() = default;
+    Frame(int tile_id, int seq, int src_x, int src_y, int w, int h)
+        : tile_id_(tile_id), seq_(seq), src_x_(src_x), src_y_(src_y), w_(w), h_(h) {}
 
-    SpriteAtlas(const SpriteAtlas&) = delete;
-    SpriteAtlas& operator=(const SpriteAtlas&) = delete;
+    int tile_id() const { return tile_id_; }
+    int seq() const { return seq_; }
 
-    // Load ALL *.tsx under artDir (non-recursive). For each TSX, load referenced PNG.
-    bool loadDirectory(const std::filesystem::path& artDir);
-
-    // Lookup by TSX path (as referenced in TMX "source=...").
-    // Pass a TMX-resolved absolute path for best results.
-    const SpriteTileset* findByTsxPath(const std::filesystem::path& tsxPath) const;
-
-    void unloadAll();
+    Rectangle rect() const {
+        return Rectangle{ (float)src_x_, (float)src_y_, (float)w_, (float)h_ };
+    }
 
 private:
-    std::unordered_map<std::string, SpriteTileset> byTsxAbs_; // key = absolute tsx path string
+    int tile_id_ = -1;
+    int seq_ = -1;
+    int src_x_ = 0;
+    int src_y_ = 0;
+    int w_ = 0;
+    int h_ = 0;
 };
+
+struct Clip { std::vector<Frame> frames; };
+
+struct Sprite {
+    std::string name;
+    Clip north, south, east, west;
+};
+
+
+class Sprites {
+public:
+    bool loadTSX(const std::string& tsx_path);
+
+    // ---- access ----
+    int frame_count(const std::string& name, Dir dir) const;
+    const Frame* frame(const std::string& name, Dir dir, int index) const;
+
+    const Sprite* get(const std::string& name) const;
+
+    const std::string& image_source() const { return image_source_; }
+
+    // ---- debug ----
+    void debug_dump() const;
+
+private:
+    struct SpriteClips { Clip n, e, s, w; };
+
+    static Clip& clip(SpriteClips& sc, Dir d);
+    static const Clip* clip(const SpriteClips& sc, Dir d);
+    static void sort_clip(Clip& c);
+
+    int tile_w_ = 0;
+    int tile_h_ = 0;
+    int columns_ = 0;
+    std::string image_source_;
+
+    std::unordered_map<std::string, SpriteClips> sprites_;
+};
+

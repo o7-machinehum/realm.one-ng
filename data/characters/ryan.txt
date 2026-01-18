@@ -1,4 +1,4 @@
 password=ryan1234
 room=d1
-x=52
-y=23
+x=65
+y=26
