@@ -73,83 +73,111 @@ bool Room::loadFromFile(const std::filesystem::path& tmx_path) {
     return parseTmxDoc(doc);
 }
 
+
 bool Room::parseTmxDoc(XMLDocument& doc) {
     tilesets_.clear();
     layers_.clear();
-    props_.clear(); // <-- your new dict member (e.g. std::unordered_map<std::string,std::string>)
+    props_.clear();
 
     XMLElement* map = doc.FirstChildElement("map");
     if (!map) return false;
 
+    // required-ish map attrs (QueryIntAttribute leaves value unchanged on failure)
+    map_w_  = 0; map_h_ = 0;
+    tile_w_ = 0; tile_h_ = 0;
     map->QueryIntAttribute("width", &map_w_);
     map->QueryIntAttribute("height", &map_h_);
     map->QueryIntAttribute("tilewidth", &tile_w_);
     map->QueryIntAttribute("tileheight", &tile_h_);
 
-    // ---- properties -> flat dict (dot-path keys) ----
-    auto addPropFlat = [&](const std::string& key, const char* v) {
-        props_[key] = v ? v : "";
-    };
+    if (map_w_ <= 0 || map_h_ <= 0 || tile_w_ <= 0 || tile_h_ <= 0) return false;
 
-    std::function<void(XMLElement*, const std::string&)> walkProps =
-        [&](XMLElement* propsElem, const std::string& prefix) {
-            if (!propsElem) return;
+    // ---- properties -> flat dict (dot keys, supports type="class") ----
+    struct Frame { XMLElement* props; std::string prefix; };
+    std::vector<Frame> stack;
 
-            for (XMLElement* p = propsElem->FirstChildElement("property");
-                 p;
-                 p = p->NextSiblingElement("property")) {
+    if (XMLElement* props = map->FirstChildElement("properties")) {
+        stack.push_back({ props, "" });
+    }
 
-                const char* name = p->Attribute("name");
-                if (!name) continue;
+    while (!stack.empty()) {
+        Frame fr = std::move(stack.back());
+        stack.pop_back();
 
-                std::string key = prefix.empty() ? std::string(name)
-                                                 : (prefix + "." + name);
+        for (XMLElement* p = fr.props->FirstChildElement("property");
+             p;
+             p = p->NextSiblingElement("property")) {
 
-                const char* type = p->Attribute("type");
-                if (type && std::string(type) == "class") {
-                    walkProps(p->FirstChildElement("properties"), key);
-                    continue;
+            const char* name = p->Attribute("name");
+            if (!name) continue;
+
+            std::string key = fr.prefix.empty() ? std::string(name)
+                                                : (fr.prefix + "." + name);
+
+            const char* type = p->Attribute("type");
+            if (type && std::strcmp(type, "class") == 0) {
+                if (XMLElement* childProps = p->FirstChildElement("properties")) {
+                    stack.push_back({ childProps, std::move(key) });
                 }
-
-                const char* v = p->Attribute("value");
-                if (!v) v = p->GetText();
-                addPropFlat(key, v);
+                continue;
             }
-        };
 
-    walkProps(map->FirstChildElement("properties"), "");
+            const char* v = p->Attribute("value");
+            if (!v) v = p->GetText();
+            props_[key] = v ? v : "";
+        }
+    }
 
-    // ---- tilesets ----
-    for (XMLElement* ts = map->FirstChildElement("tileset"); ts; ts = ts->NextSiblingElement("tileset")) {
+    // ---- tilesets (external TSX only, as your renderer expects) ----
+    for (XMLElement* ts = map->FirstChildElement("tileset");
+         ts;
+         ts = ts->NextSiblingElement("tileset")) {
+
         RoomTilesetRef r;
+        r.first_gid = 0;
         ts->QueryIntAttribute("firstgid", &r.first_gid);
+
         const char* src = ts->Attribute("source");
-        if (!src) return false;
+        if (!src || r.first_gid <= 0) return false;
+
         r.source_tsx = src;
         tilesets_.push_back(std::move(r));
     }
-    if (tilesets_.empty()) return false;
 
     // ---- layers (CSV only) ----
-    for (XMLElement* layer = map->FirstChildElement("layer"); layer; layer = layer->NextSiblingElement("layer")) {
-        RoomLayer L;
-        const char* name = layer->Attribute("name");
-        L.name = name ? name : "Layer";
+    for (XMLElement* layer = map->FirstChildElement("layer");
+         layer;
+         layer = layer->NextSiblingElement("layer")) {
 
+        RoomLayer L;
+
+        const char* lname = layer->Attribute("name");
+        L.name = lname ? lname : "Layer";
+
+        L.width = 0;
+        L.height = 0;
         layer->QueryIntAttribute("width", &L.width);
         layer->QueryIntAttribute("height", &L.height);
+        if (L.width <= 0 || L.height <= 0) return false;
 
         XMLElement* data = layer->FirstChildElement("data");
         if (!data) return false;
 
         const char* enc = data->Attribute("encoding");
-        if (!enc || std::string(enc) != "csv") return false;
+        if (!enc || std::strcmp(enc, "csv") != 0) return false;
 
-        L.gids = parseCsvU32(data->GetText());
+        const char* text = data->GetText();
+        if (!text) return false;
+
+        L.gids = parseCsvU32(text);
         if ((int)L.gids.size() != L.width * L.height) return false;
 
         layers_.push_back(std::move(L));
     }
 
-    return !layers_.empty();
+    // require at least one tileset + one layer like before
+    if (tilesets_.empty()) return false;
+    if (layers_.empty()) return false;
+
+    return true;
 }
