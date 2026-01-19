@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.16)
 project(quick_game CXX)
 
@@ -7,6 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(raylib REQUIRED)
 find_package(tinyxml2 REQUIRED)
+find_package(cereal REQUIRED)
+
+# ENet doesn't have a CMake config, use pkg-config
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ENET REQUIRED libenet)
 
 # Shared code
 add_library(qg_common
@@ -24,13 +28,62 @@ target_link_libraries(qg_common PUBLIC
   tinyxml2::tinyxml2
 )
 
-# Tests
+# ----- Client
+# add_executable(client
+#     src/client/client.cpp
+#     src/client/client_net.cpp
+#     src/client/text_input.cpp
+# )
+#
+# target_link_libraries(client PRIVATE
+#     ${ENET_LIBRARIES}
+#     qg_common
+#     raylib
+# )
+#
+# target_include_directories(client PRIVATE
+#     ${ENET_INCLUDE_DIRS}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+# )
+#
+# # ----- Server
+# add_executable(server
+#     src/server/server.cpp
+#     src/server/server_net.cpp
+#     src/server/world.cpp
+#     src/server/fs_db.cpp
+# )
+#
+# target_link_libraries(server PRIVATE
+#     ${ENET_LIBRARIES}
+#     qg_common
+#     raylib
+# )
+#
+# target_include_directories(server PRIVATE
+#     ${ENET_INCLUDE_DIRS}
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+# )
+
+# ----- Tests
 add_executable(test_room src/tests/test_room.cpp)
 target_link_libraries(test_room PRIVATE qg_common raylib)
 
 add_executable(test_sprites src/tests/test_sprites.cpp)
 target_link_libraries(test_sprites PRIVATE qg_common raylib)
 
-enable_testing()
-add_test(NAME test_room COMMAND test_room WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME test_sprites COMMAND test_sprites WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# ---- test-client/server
+add_executable(client_server_ser_de
+    src/tests/client_server_ser_de.cpp
+)
+target_link_libraries(client_server_ser_de PRIVATE
+    ${ENET_LIBRARIES}
+    qg_common
+    cereal::cereal
+)
+target_include_directories(client_server_ser_de PRIVATE
+    ${ENET_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+)

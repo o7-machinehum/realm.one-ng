@@ -1,8 +1,8 @@
 BUILD_DIR := build
 CONFIG    := Debug
 
-CLIENT_BIN := quick_game_client
-SERVER_BIN := quick_game_server
+CLIENT_BIN := client
+SERVER_BIN := server
 
 # Defaults (override like: make run-server PORT=7777)
 PORT ?= 7777

@@ -1,10 +1,11 @@
-
 #pragma once
 
 #include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <functional>
 
 namespace tinyxml2 { class XMLDocument; }
 
@@ -33,13 +34,8 @@ public:
     const std::vector<RoomTilesetRef>& tilesets() const { return tilesets_; }
     const std::vector<RoomLayer>& layers() const { return layers_; }
 
-    // ---- network serialization ----
-    std::vector<uint8_t> serialize() const;
-    bool deserialize(const uint8_t* data, size_t size);
-
-    // Convenience
-    bool deserialize(const std::vector<uint8_t>& bytes) {
-        return deserialize(bytes.data(), bytes.size());
+    std::string get_name() {
+        return name_;
     }
 
 private:
@@ -50,7 +46,8 @@ private:
     int tile_w_ = 16;
     int tile_h_ = 16;
 
+    std::string name_; // Name of room inc. path
     std::vector<RoomTilesetRef> tilesets_;
     std::vector<RoomLayer> layers_;
+    std::unordered_map<std::string, std::string> props_;
 };
-

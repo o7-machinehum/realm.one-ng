@@ -4,6 +4,7 @@
 #include <chrono>
 #include "server_net.h"
 #include "fs_db.h"
+#include "world.h"
 
 int main(int argc, char** argv) {
     if (enet_initialize() != 0) {
@@ -15,7 +16,8 @@ int main(int argc, char** argv) {
     if (argc >= 2) port = std::stoi(argv[1]);
 
     FsDb db("data");
-    ServerNet server(port, std::move(db));
+    World world("data/rooms/"); // Load the entire world
+    ServerNet server(port, std::move(db), std::move(world));
     if (!server.start()) return 2;
 
     // basic tick loop

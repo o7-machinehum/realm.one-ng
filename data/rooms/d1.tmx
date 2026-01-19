@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="5" nextobjectid="1">
+ <properties>
+  <property name="pos" type="class" propertytype="pos3">
+   <properties>
+    <property name="x" type="int" value="0"/>
+    <property name="y" type="int" value="0"/>
+    <property name="z" type="int" value="0"/>
+   </properties>
+  </property>
+ </properties>
  <tileset firstgid="1" source="../../game/assets/art/cave.tsx"/>
  <layer id="1" name="Floor" width="30" height="20">
   <data encoding="csv">

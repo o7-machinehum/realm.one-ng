@@ -1,5 +1,6 @@
 #include "sprites.h"
 #include "tinyxml2.h"
+#include "helpers.h"
 
 #include <algorithm>
 #include <cctype>
@@ -8,14 +9,6 @@
 #include <cstdio>
 
 using namespace tinyxml2;
-
-// -----------------------------
-// helpers
-// -----------------------------
-
-static int atoi_safe(const char* s, int def = -1) {
-    return (s && *s) ? std::atoi(s) : def;
-}
 
 static Dir parse_dir(const char* v) {
     if (!v || !v[0]) return Dir::S;

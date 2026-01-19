@@ -3,14 +3,24 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "",
+    "activeFile": "/home/machinehum/projects/quick_game/data/rooms/d1.tmx",
     "expandedProjectPaths": [
+        ".",
+        "art"
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
         "/home/machinehum/projects/quick_game/data/assets/art/cave.tsx": {
             "dynamicWrapping": true,
             "scaleInDock": 1
+        },
+        "/home/machinehum/projects/quick_game/data/rooms/d1.tmx": {
+            "scale": 2,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 189.5,
+                "y": 161
+            }
         },
         "/home/machinehum/projects/quick_game/game/map/character.tsx": {
             "scaleInDock": 1,
@@ -25,10 +35,14 @@
             }
         },
         "art/cave.tsx": {
-            "dynamicWrapping": false
+            "dynamicWrapping": false,
+            "scaleInDock": 3,
+            "scaleInEditor": 5.5
         },
         "art/character.tsx": {
-            "dynamicWrapping": false
+            "dynamicWrapping": false,
+            "scaleInDock": 2,
+            "scaleInEditor": 5.5
         }
     },
     "last.externalTilesetPath": "/home/machinehum/projects/quick_game/game/assets/art",
@@ -37,10 +51,16 @@
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "openFiles": [
+        "art/cave.tsx",
+        "art/character.tsx",
+        "/home/machinehum/projects/quick_game/data/rooms/d1.tmx"
     ],
     "project": "main.tiled-project",
-    "property.type": "int",
+    "property.type": "pos3",
     "recentFiles": [
+        "art/cave.tsx",
+        "art/character.tsx",
+        "/home/machinehum/projects/quick_game/data/rooms/d1.tmx",
         "/home/machinehum/projects/quick_game/game/map/d1.tmx",
         "/home/machinehum/projects/quick_game/game/map/character.tsx"
     ],

@@ -35,16 +35,17 @@ int main() {
     SetTargetFPS(60);
 
     // ---- Assets (client-side art only) ----
-    SpriteAtlas atlas;
-    if (!atlas.loadDirectory("game/assets/art")) {
-        std::cerr << "Failed to load sprites from game/assets/art\n";
-    }
+    Sprites sprites;
+    // if (!atlas.loadDirectory("game/assets/art")) {
+    //     std::cerr << "Failed to load sprites from game/assets/art\n";
+    // }
+    // TsxInfo tsx;
+    // if (!load_tsx_info(tsxPath, tsx)) return 1;
 
     auto cover = LoadTexture("game/assets/img/cover.png");
 
     // Start with a local room until server sends one (optional)
     Room room;
-    room.loadFromFile("game/map/d1.tmx");
 
     // Character: we only DRAW it now; position is authoritative from server STATE.
     Character guy(/*topTileId=*/0, /*startWorldPx=*/Vector2{16.0f * 5, 16.0f * 5});
@@ -124,7 +125,7 @@ int main() {
         if (auto tmx = net.takeRoomTmx()) {
             // TMX arrived over network; baseDir is only for resolving TSX relative paths.
             // Your TMX uses ../assets/art/... so "game/map" makes it resolve to game/assets/art.
-            if (room.loadFromXmlString(*tmx, "game/map")) {
+            if (room.loadFromXmlString(*tmx)) {
                 ui.pushLog("Loaded room from server");
                 haveServerRoom = true;
             } else {
@@ -151,7 +152,6 @@ int main() {
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        room.draw(atlas, Vector2{-cam.x, -cam.y});
 
         // Other players (placeholder)
         if (net.connected() && net.authed()) {
