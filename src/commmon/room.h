@@ -11,7 +11,7 @@ namespace tinyxml2 { class XMLDocument; }
 
 struct RoomTilesetRef {
     int first_gid = 1;
-    std::string source_tsx; // as it appears in TMX (relative path)
+    std::string source_tsx; // tsx fname
 };
 
 struct RoomLayer {

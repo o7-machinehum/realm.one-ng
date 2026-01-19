@@ -68,7 +68,16 @@ target_link_libraries(qg_common PUBLIC
 # )
 
 # ----- Tests
-add_executable(test_room src/tests/test_room.cpp)
+add_executable(test_room
+    src/tests/test_room.cpp
+    src/client/room_render.cpp
+)
+
+target_include_directories(test_room PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+)
+
+
 target_link_libraries(test_room PRIVATE qg_common raylib)
 
 add_executable(test_sprites src/tests/test_sprites.cpp)

@@ -140,7 +140,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         const char* src = ts->Attribute("source");
         if (!src || r.first_gid <= 0) return false;
 
-        r.source_tsx = src;
+        r.source_tsx = std::filesystem::path(src).filename().string();;
         tilesets_.push_back(std::move(r));
     }
 
