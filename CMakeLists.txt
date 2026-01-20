@@ -18,6 +18,7 @@ add_library(qg_common
   src/commmon/room.cpp
   src/commmon/entity.cpp
   src/commmon/character.cpp
+  src/client/room_render.cpp
 )
 
 target_include_directories(qg_common PUBLIC
@@ -29,23 +30,22 @@ target_link_libraries(qg_common PUBLIC
 )
 
 # ----- Client
-# add_executable(client
-#     src/client/client.cpp
-#     src/client/client_net.cpp
-#     src/client/text_input.cpp
-# )
-#
-# target_link_libraries(client PRIVATE
-#     ${ENET_LIBRARIES}
-#     qg_common
-#     raylib
-# )
-#
-# target_include_directories(client PRIVATE
-#     ${ENET_INCLUDE_DIRS}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-#     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
-# )
+add_executable(client
+    src/client/client.cpp
+)
+
+target_link_libraries(client PRIVATE
+    ${ENET_LIBRARIES}
+    qg_common
+    raylib
+)
+
+target_include_directories(client PRIVATE
+    ${ENET_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+)
+
 #
 # # ----- Server
 # add_executable(server
@@ -77,7 +77,6 @@ target_include_directories(test_room PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )
 
-
 target_link_libraries(test_room PRIVATE qg_common raylib)
 
 add_executable(test_sprites src/tests/test_sprites.cpp)
@@ -86,13 +85,17 @@ target_link_libraries(test_sprites PRIVATE qg_common raylib)
 # ---- test-client/server
 add_executable(client_server_ser_de
     src/tests/client_server_ser_de.cpp
+    src/client/room_render.cpp
 )
 target_link_libraries(client_server_ser_de PRIVATE
     ${ENET_LIBRARIES}
     qg_common
     cereal::cereal
+    raylib
 )
 target_include_directories(client_server_ser_de PRIVATE
     ${ENET_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )

@@ -7,11 +7,21 @@
 #include <unordered_map>
 #include <functional>
 
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/string.hpp>
+#include <cereal/types/vector.hpp>
+#include <cereal/types/unordered_map.hpp>
+
 namespace tinyxml2 { class XMLDocument; }
 
 struct RoomTilesetRef {
     int first_gid = 1;
     std::string source_tsx; // tsx fname
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(first_gid, source_tsx);
+    }
 };
 
 struct RoomLayer {
@@ -19,6 +29,11 @@ struct RoomLayer {
     int width = 0;
     int height = 0;
     std::vector<uint32_t> gids; // size = width*height
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(name, width, height, gids);
+    }
 };
 
 class Room {
@@ -50,4 +65,11 @@ private:
     std::vector<RoomTilesetRef> tilesets_;
     std::vector<RoomLayer> layers_;
     std::unordered_map<std::string, std::string> props_;
+
+    friend class cereal::access;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(map_w_, map_h_, tile_w_, tile_h_, name_, tilesets_, layers_, props_);
+    }
 };
