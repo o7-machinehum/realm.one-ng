@@ -5,14 +5,15 @@
 #include <atomic>
 
 #include "msg.h"
+#include "envelope.h"
 
-class NetClient {
+class NetServer {
 public:
-    NetClient(Mailbox& mailbox, std::string host, uint16_t port)
-        : mailbox_(mailbox), hostname_(host), port_(port)  {}
+    NetServer(Mailbox& mailbox, uint16_t port)
+        : mailbox_(mailbox), port_(port)  {}
 
     void start() {
-        recv_thread_ = std::thread(&NetClient::recvLoop, this);
+        recv_thread_ = std::thread(&NetServer::recvLoop, this);
     }
 
     void stop() {
@@ -27,6 +28,5 @@ private:
     std::atomic<bool> running_{true};
 
     void recvLoop();
-    std::string hostname_;
     uint16_t port_;
 };

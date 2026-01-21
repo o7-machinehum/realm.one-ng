@@ -32,6 +32,7 @@ target_link_libraries(qg_common PUBLIC
 # ----- Client
 add_executable(client
     src/client/client.cpp
+    src/client/net_client.cpp
 )
 
 target_link_libraries(client PRIVATE
@@ -46,26 +47,24 @@ target_include_directories(client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
 )
 
-#
-# # ----- Server
-# add_executable(server
-#     src/server/server.cpp
-#     src/server/server_net.cpp
-#     src/server/world.cpp
-#     src/server/fs_db.cpp
-# )
-#
-# target_link_libraries(server PRIVATE
-#     ${ENET_LIBRARIES}
-#     qg_common
-#     raylib
-# )
-#
-# target_include_directories(server PRIVATE
-#     ${ENET_INCLUDE_DIRS}
-#     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-#     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
-# )
+# ----- Server
+add_executable(server
+    src/server/server.cpp
+    src/server/net_server.cpp
+    src/server/world.cpp
+)
+
+target_link_libraries(server PRIVATE
+    ${ENET_LIBRARIES}
+    qg_common
+    raylib
+)
+
+target_include_directories(server PRIVATE
+    ${ENET_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+)
 
 # ----- Tests
 add_executable(test_room

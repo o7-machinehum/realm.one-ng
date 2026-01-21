@@ -2,33 +2,21 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include "server_net.h"
-#include "fs_db.h"
+
+#include "net_server.h"
 #include "world.h"
+#include "msg.h"
 
-int main(int argc, char** argv) {
-    if (enet_initialize() != 0) {
-        std::cerr << "enet_initialize failed\n";
-        return 1;
-    }
-
-    int port = 7777;
-    if (argc >= 2) port = std::stoi(argv[1]);
-
-    FsDb db("data");
+int main() {
     World world("data/rooms/"); // Load the entire world
-    ServerNet server(port, std::move(db), std::move(world));
-    if (!server.start()) return 2;
+    Mailbox mailbox;
+    NetServer ns(mailbox, 7000);
+    ns.start();
 
-    // basic tick loop
-    double last = enet_time_get() / 1000.0;
     while (true) {
-        double now = enet_time_get() / 1000.0;
-        float dt = (float)(now - last);
-        last = now;
-
-        server.tick(dt);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // if(auto login = mailbox.pop<LoginMsg>(MsgType::Login)) {
+        //     // Verify
+        // }
     }
 
     enet_deinitialize();
