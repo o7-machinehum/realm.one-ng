@@ -32,6 +32,7 @@ private:
         int tileW = 0;
         int tileH = 0;
         int columns = 0;
+        bool drawable = true;
         Texture2D tex{};
     };
 

@@ -1,0 +1,20 @@
+{
+    "maps": [
+        {
+            "fileName": "rooms/d1.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "fileName": "rooms/d2.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 480,
+            "y": 0
+        }
+    ],
+    "onlyShowAdjacentMaps": false,
+    "type": "world"
+}

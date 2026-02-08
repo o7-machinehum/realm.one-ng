@@ -5,7 +5,9 @@
     "compatibilityVersion": 1100,
     "extensionsPath": "extensions",
     "folders": [
-        "."
+        ".",
+        "../../data/rooms",
+        "../../data/worlds"
     ],
     "properties": [
     ],
@@ -62,6 +64,46 @@
                 }
             ],
             "name": "pos3",
+            "type": "class",
+            "useAs": [
+                "property",
+                "map",
+                "layer",
+                "object",
+                "tile",
+                "tileset",
+                "wangcolor",
+                "wangset",
+                "project"
+            ]
+        },
+        {
+            "color": "#ffa0a0a4",
+            "drawFill": true,
+            "id": 5,
+            "members": [
+                {
+                    "name": "room",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "world",
+                    "type": "string",
+                    "value": ""
+                },
+                {
+                    "name": "x",
+                    "type": "int",
+                    "value": 0
+                },
+                {
+                    "name": "y",
+                    "type": "int",
+                    "value": 0
+                }
+            ],
+            "name": "potal",
             "type": "class",
             "useAs": [
                 "property",

@@ -1,12 +1,14 @@
 #include "room.h"
-#include "helpers.h"
 
 #include <tinyxml2.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -55,6 +57,83 @@ static std::vector<uint32_t> parseCsvU32(const char* text) {
     return out;
 }
 
+static std::map<int, bool> loadWalkableTileProps(const std::filesystem::path& tsx_path) {
+    std::map<int, bool> out;
+    XMLDocument doc;
+    if (doc.LoadFile(tsx_path.string().c_str()) != XML_SUCCESS) return out;
+
+    XMLElement* tileset = doc.FirstChildElement("tileset");
+    if (!tileset) return out;
+
+    for (XMLElement* tile = tileset->FirstChildElement("tile");
+         tile;
+         tile = tile->NextSiblingElement("tile")) {
+        int id = -1;
+        tile->QueryIntAttribute("id", &id);
+        if (id < 0) continue;
+
+        XMLElement* props = tile->FirstChildElement("properties");
+        if (!props) continue;
+        for (XMLElement* p = props->FirstChildElement("property");
+             p;
+             p = p->NextSiblingElement("property")) {
+            const char* pname = p->Attribute("name");
+            if (!pname) continue;
+
+            auto read_bool = [&](bool& v) -> bool {
+                if (p->QueryBoolAttribute("value", &v) == XML_SUCCESS) return true;
+                const char* txt = p->GetText();
+                if (!txt) return false;
+                std::string s = txt;
+                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+                v = (s == "1" || s == "true" || s == "yes");
+                return true;
+            };
+
+            bool b = false;
+            if (std::strcmp(pname, "not_walkable") == 0 || std::strcmp(pname, "non_walkable") == 0) {
+                if (read_bool(b)) out[id] = !b;
+            } else {
+                continue;
+            }
+        }
+    }
+    return out;
+}
+
+static std::map<int, std::string> loadTileStringProps(const std::filesystem::path& tsx_path, const char* key_name) {
+    std::map<int, std::string> out;
+    XMLDocument doc;
+    if (doc.LoadFile(tsx_path.string().c_str()) != XML_SUCCESS) return out;
+
+    XMLElement* tileset = doc.FirstChildElement("tileset");
+    if (!tileset) return out;
+
+    for (XMLElement* tile = tileset->FirstChildElement("tile");
+         tile;
+         tile = tile->NextSiblingElement("tile")) {
+        int id = -1;
+        tile->QueryIntAttribute("id", &id);
+        if (id < 0) continue;
+
+        XMLElement* props = tile->FirstChildElement("properties");
+        if (!props) continue;
+        for (XMLElement* p = props->FirstChildElement("property");
+             p;
+             p = p->NextSiblingElement("property")) {
+            const char* pname = p->Attribute("name");
+            if (!pname || std::strcmp(pname, key_name) != 0) continue;
+
+            const char* v = p->Attribute("value");
+            if (!v) v = p->GetText();
+            if (!v || !*v) continue;
+            out[id] = v;
+            break;
+        }
+    }
+    return out;
+}
+
 // ---------- Room impl ----------
 bool Room::loadFromFile(const std::filesystem::path& tmx_path) {
     name_ = tmx_path.filename().string();
@@ -77,6 +156,9 @@ bool Room::loadFromFile(const std::filesystem::path& tmx_path) {
 bool Room::parseTmxDoc(XMLDocument& doc) {
     tilesets_.clear();
     layers_.clear();
+    portals_.clear();
+    monster_spawns_.clear();
+    walkable_mask_.clear();
     props_.clear();
 
     XMLElement* map = doc.FirstChildElement("map");
@@ -129,6 +211,8 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     }
 
     // ---- tilesets (external TSX only, as your renderer expects) ----
+    std::vector<std::map<int, bool>> ts_walk_props;
+    std::vector<std::map<int, std::string>> ts_monster_props;
     for (XMLElement* ts = map->FirstChildElement("tileset");
          ts;
          ts = ts->NextSiblingElement("tileset")) {
@@ -142,6 +226,15 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
 
         r.source_tsx = std::filesystem::path(src).filename().string();;
         tilesets_.push_back(std::move(r));
+        ts_walk_props.push_back(loadWalkableTileProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx));
+        auto mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_name");
+        if (mon_props.empty()) {
+            mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_id");
+        }
+        if (mon_props.empty()) {
+            mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster");
+        }
+        ts_monster_props.push_back(std::move(mon_props));
     }
 
     // ---- layers (CSV only) ----
@@ -175,9 +268,205 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         layers_.push_back(std::move(L));
     }
 
+    // ---- portal triggers (object layer named Portals) ----
+    for (XMLElement* og = map->FirstChildElement("objectgroup");
+         og;
+         og = og->NextSiblingElement("objectgroup")) {
+        const char* lname = og->Attribute("name");
+        if (!lname || std::string(lname) != "Portals") continue;
+        XMLElement* og_props = og->FirstChildElement("properties");
+
+        for (XMLElement* obj = og->FirstChildElement("object");
+             obj;
+             obj = obj->NextSiblingElement("object")) {
+            PortalTrigger p{};
+            std::string to_world;
+            obj->QueryFloatAttribute("x", &p.x);
+            obj->QueryFloatAttribute("y", &p.y);
+            obj->QueryFloatAttribute("width", &p.w);
+            obj->QueryFloatAttribute("height", &p.h);
+
+            bool has_room = false;
+            bool has_to_x = false;
+            bool has_to_y = false;
+            auto parsePortalProps = [&](XMLElement* props) {
+                if (!props) return;
+                for (XMLElement* prop = props->FirstChildElement("property");
+                     prop;
+                     prop = prop->NextSiblingElement("property")) {
+                    auto read_str = [&](XMLElement* el) -> std::string {
+                        const char* v = el->Attribute("value");
+                        if (!v) v = el->GetText();
+                        return v ? v : "";
+                    };
+                    auto read_int = [&](XMLElement* el, int fallback) -> int {
+                        int out = fallback;
+                        if (el->QueryIntAttribute("value", &out) == XML_SUCCESS) return out;
+                        const char* t = el->GetText();
+                        try { return t ? std::stoi(t) : fallback; } catch (...) { return fallback; }
+                    };
+
+                    const char* n = prop->Attribute("name");
+                    std::string key = n ? std::string(n) : "";
+
+                    if (key == "to_room" || key == "room") {
+                        p.to_room = read_str(prop);
+                        has_room = !p.to_room.empty();
+                    } else if (key == "to_world" || key == "world") {
+                        to_world = read_str(prop);
+                    } else if (key == "to_x" || key == "x") {
+                        p.to_x = read_int(prop, p.to_x);
+                        has_to_x = true;
+                    } else if (key == "to_y" || key == "y") {
+                        p.to_y = read_int(prop, p.to_y);
+                        has_to_y = true;
+                    }
+
+                    // Support class properties like p1.room/x/y.
+                    XMLElement* nested = prop->FirstChildElement("properties");
+                    if (!nested) continue;
+                    for (XMLElement* np = nested->FirstChildElement("property");
+                         np;
+                         np = np->NextSiblingElement("property")) {
+                        const char* nn = np->Attribute("name");
+                        if (!nn) continue;
+                        std::string nkey = nn;
+                        if (nkey == "to_room" || nkey == "room") {
+                            p.to_room = read_str(np);
+                            has_room = !p.to_room.empty();
+                        } else if (nkey == "to_world" || nkey == "world") {
+                            to_world = read_str(np);
+                        } else if (nkey == "to_x" || nkey == "x") {
+                            p.to_x = read_int(np, p.to_x);
+                            has_to_x = true;
+                        } else if (nkey == "to_y" || nkey == "y") {
+                            p.to_y = read_int(np, p.to_y);
+                            has_to_y = true;
+                        }
+                    }
+                }
+            };
+
+            parsePortalProps(obj->FirstChildElement("properties"));
+            if (!has_room || !has_to_x || !has_to_y) {
+                parsePortalProps(og_props);
+            }
+
+            // Fallback to map-level class property "to" flattened as "to.room/to.x/to.y"
+            if (!has_room) {
+                auto it = props_.find("to.room");
+                if (it != props_.end()) {
+                    p.to_room = it->second;
+                    has_room = !p.to_room.empty();
+                }
+            }
+            if (!has_to_x) {
+                auto it = props_.find("to.x");
+                if (it != props_.end()) {
+                    try { p.to_x = std::stoi(it->second); } catch (...) {}
+                }
+            }
+            if (!has_to_y) {
+                auto it = props_.find("to.y");
+                if (it != props_.end()) {
+                    try { p.to_y = std::stoi(it->second); } catch (...) {}
+                }
+            }
+
+            if (!p.to_room.empty()) {
+                if (!to_world.empty() && p.to_room.find(':') == std::string::npos) {
+                    p.to_room = to_world + ":" + p.to_room;
+                }
+                portals_.push_back(std::move(p));
+            }
+        }
+    }
+
+    auto findTsIndexByGid = [&](uint32_t gid) -> int {
+        int best = -1;
+        for (size_t i = 0; i < tilesets_.size(); ++i) {
+            if (gid >= static_cast<uint32_t>(tilesets_[i].first_gid)) best = static_cast<int>(i);
+            else break;
+        }
+        return best;
+    };
+
+    // ---- monster spawns from tile layer named Monsters ----
+    for (const auto& layer : layers_) {
+        if (layer.name != "Monsters") continue;
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (raw == 0) continue;
+                const uint32_t gid = raw & 0x1FFFFFFFu;
+                const int tsi = findTsIndexByGid(gid);
+                if (tsi < 0 || tsi >= static_cast<int>(ts_monster_props.size())) continue;
+                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
+                auto it = ts_monster_props[tsi].find(local);
+                if (it == ts_monster_props[tsi].end() || it->second.empty()) continue;
+                monster_spawns_.push_back(MonsterSpawn{it->second, "", x, y});
+            }
+        }
+        break;
+    }
+
     // require at least one tileset + one layer like before
     if (tilesets_.empty()) return false;
     if (layers_.empty()) return false;
 
+    // ---- walkability mask ----
+    std::vector<int8_t> walk_override((size_t)map_w_ * (size_t)map_h_, -1); // -1 unset, 0 blocked, 1 walkable
+
+    // Tile property overrides from TSX (e.g., non_walkable=true in properties.tsx).
+    for (const auto& layer : layers_) {
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (raw == 0) continue;
+                const uint32_t gid = raw & 0x1FFFFFFFu; // strip TMX flip flags
+
+                const int tsi = findTsIndexByGid(gid);
+                if (tsi < 0 || tsi >= static_cast<int>(ts_walk_props.size())) continue;
+                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
+                auto it = ts_walk_props[tsi].find(local);
+                if (it == ts_walk_props[tsi].end()) continue;
+
+                walk_override[(size_t)y * (size_t)map_w_ + (size_t)x] = it->second ? 1 : 0;
+            }
+        }
+    }
+
+    // Default semantics: everything is walkable unless explicitly blocked.
+    walkable_mask_.assign((size_t)map_w_ * (size_t)map_h_, 1);
+
+    // Block layer convention: gid != 0 blocks movement.
+    for (const auto& layer : layers_) {
+        if (layer.name != "Block") continue;
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t gid = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (gid != 0) {
+                    walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] = 0;
+                }
+            }
+        }
+    }
+
+    // Explicit TSX walkable overrides are final.
+    for (int y = 0; y < map_h_; ++y) {
+        for (int x = 0; x < map_w_; ++x) {
+            const int8_t ov = walk_override[(size_t)y * (size_t)map_w_ + (size_t)x];
+            if (ov >= 0) {
+                walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] = static_cast<uint8_t>(ov);
+            }
+        }
+    }
+
     return true;
+}
+
+bool Room::isWalkable(int x, int y) const {
+    if (x < 0 || y < 0 || x >= map_w_ || y >= map_h_) return false;
+    if (walkable_mask_.empty()) return true;
+    return walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] != 0;
 }

@@ -3,7 +3,7 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "/home/machinehum/the_island/data/rooms/d1.tmx",
+    "activeFile": "/home/machinehum/the_island/data/rooms/d2.tmx",
     "expandedProjectPaths": [
         ".",
         "art"
@@ -35,39 +35,74 @@
             }
         },
         "/home/machinehum/the_island/data/rooms/d1.tmx": {
-            "scale": 3.0360416666666663,
-            "selectedLayer": 0,
+            "scale": 3,
+            "selectedLayer": 7,
             "viewCenter": {
-                "x": 134.71488368901393,
-                "y": 74.43903108488301
+                "x": 235.16666666666666,
+                "y": 188.33333333333334
+            }
+        },
+        "/home/machinehum/the_island/data/rooms/d2.tmx": {
+            "expandedObjectLayers": [
+                11
+            ],
+            "scale": 4,
+            "selectedLayer": 7,
+            "viewCenter": {
+                "x": 242.125,
+                "y": 170.5
+            }
+        },
+        "/home/machinehum/the_island/data/rooms/n1_1.tmx": {
+            "expandedObjectLayers": [
+                11
+            ],
+            "scale": 5.5,
+            "selectedLayer": 7,
+            "viewCenter": {
+                "x": 248.63636363636365,
+                "y": 129.81818181818184
             }
         },
         "art/cave.tsx": {
             "dynamicWrapping": false,
-            "scaleInDock": 3,
+            "scaleInDock": 1.5,
             "scaleInEditor": 5.5
         },
         "art/character.tsx": {
             "dynamicWrapping": false,
             "scaleInDock": 2,
             "scaleInEditor": 5.5
+        },
+        "art/properties.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
         }
     },
     "last.externalTilesetPath": "/home/machinehum/projects/quick_game/game/assets/art",
-    "last.imagePath": "/home/machinehum/projects/quick_game/game/assets/art",
+    "last.imagePath": "/home/machinehum/the_island/game/assets/art",
+    "last.worldFilePath": "/home/machinehum/the_island/data/worlds",
+    "loadedWorlds": [
+        "/home/machinehum/the_island/data/worlds/n1.world"
+    ],
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "openFiles": [
         "art/character.tsx",
         "art/cave.tsx",
-        "/home/machinehum/the_island/data/rooms/d1.tmx"
+        "/home/machinehum/the_island/data/rooms/d2.tmx",
+        "/home/machinehum/the_island/data/rooms/n1_1.tmx",
+        "art/properties.tsx"
     ],
     "project": "main.tiled-project",
-    "property.type": "pos3",
+    "property.type": "bool",
     "recentFiles": [
         "art/character.tsx",
+        "/home/machinehum/the_island/data/rooms/n1_1.tmx",
         "art/cave.tsx",
+        "art/properties.tsx",
+        "/home/machinehum/the_island/data/rooms/d2.tmx",
         "/home/machinehum/the_island/data/rooms/d1.tmx",
         "/home/machinehum/projects/quick_game/data/rooms/d1.tmx",
         "/home/machinehum/projects/quick_game/game/map/d1.tmx",

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(quick_game CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(raylib REQUIRED)
@@ -32,6 +32,9 @@ target_link_libraries(qg_common PUBLIC
 # ----- Client
 add_executable(client
     src/client/client.cpp
+    src/client/client_support.cpp
+    src/client/client_scene_renderer.cpp
+    src/client/client_inventory_ui.cpp
     src/client/net_client.cpp
 )
 
@@ -52,6 +55,7 @@ add_executable(server
     src/server/server.cpp
     src/server/net_server.cpp
     src/server/world.cpp
+    src/server/monster_defs.cpp
     src/server/auth_db.cpp
 )
 

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "raylib.h" // Rectangle
@@ -41,7 +42,10 @@ struct Sprite {
 
 class Sprites {
 public:
+    using SizeOverrideMap = std::unordered_map<std::string, std::pair<int, int>>;
+
     bool loadTSX(const std::string& tsx_path);
+    bool loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_overrides);
 
     // ---- access ----
     int frame_count(const std::string& name, Dir dir) const;
@@ -68,4 +72,3 @@ private:
 
     std::unordered_map<std::string, SpriteClips> sprites_;
 };
-

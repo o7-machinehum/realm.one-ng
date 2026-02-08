@@ -1,0 +1,22 @@
+# Unique id comes from filename: rat.toml -> "rat"
+name = "Rat"
+
+# Sprite linkage:
+# - sprite_tileset points to game/assets/art/<file>
+# - sprite_name must match the tile property "name" used by Sprites loader
+sprite_tileset = "npc_test.tsx"
+sprite_name = "Rat"
+monster_size = "1x2"
+
+max_hp = 30
+strength = 6
+speed_ms = 500
+exp_reward = 10
+
+# Extra fields (currently ignored by code, safe to edit/add):
+# defense = 2
+# agility = 4
+# intelligence = 1
+# aggro_range = 5
+# attack_range = 1
+# loot_table = "rat_basic"

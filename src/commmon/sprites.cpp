@@ -1,33 +1,19 @@
 #include "sprites.h"
 #include "tinyxml2.h"
-#include "helpers.h"
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <unordered_map>
 
 using namespace tinyxml2;
 
-static Dir parse_dir(const char* v) {
-    if (!v || !v[0]) return Dir::S;
-    char c = (char)std::toupper((unsigned char)v[0]);
-    if (c == 'N') return Dir::N;
-    if (c == 'S') return Dir::S;
-    if (c == 'E') return Dir::E;
-    if (c == 'W') return Dir::W;
-    return Dir::S;
-}
-
-static const char* dir_name(Dir d) {
-    switch (d) {
-        case Dir::N: return "N";
-        case Dir::E: return "E";
-        case Dir::S: return "S";
-        case Dir::W: return "W";
-        default:     return "?";
-    }
+std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
 }
 
 // -----------------------------
@@ -73,6 +59,12 @@ void Sprites::sort_clip(Clip& c) {
 
 bool Sprites::loadTSX(const std::string& tsx_path)
 {
+    static const SizeOverrideMap empty;
+    return loadTSX(tsx_path, empty);
+}
+
+bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_overrides)
+{
     sprites_.clear();
     tile_w_ = tile_h_ = columns_ = 0;
     image_source_.clear();
@@ -97,7 +89,19 @@ bool Sprites::loadTSX(const std::string& tsx_path)
             image_source_ = src;
     }
 
-    // iterate tiles
+    int tile_count = 0;
+    tileset->QueryIntAttribute("tilecount", &tile_count);
+    const int total_rows = std::max(1, (tile_count + columns_ - 1) / columns_);
+
+    struct Anchor {
+        int id = -1;
+        int row = -1;
+        int col = 0;
+    };
+    std::unordered_map<std::string, Anchor> anchors;
+
+    // Collect sprite anchors from tile properties. An anchor tile is the bottom-left
+    // of the 4-direction block (S/E/N/W top->bottom), each direction extending right.
     for (XMLElement* tile = tileset->FirstChildElement("tile");
          tile;
          tile = tile->NextSiblingElement("tile"))
@@ -107,12 +111,6 @@ bool Sprites::loadTSX(const std::string& tsx_path)
         if (id < 0) continue;
 
         std::string sprite_name;
-        Dir dir = Dir::S;
-        int seq = -1;
-
-        // defaults
-        int frame_w = tile_w_;
-        int frame_h = tile_h_;
 
         XMLElement* props = tile->FirstChildElement("properties");
         if (!props) continue;
@@ -127,58 +125,78 @@ bool Sprites::loadTSX(const std::string& tsx_path)
 
             const char* pval = p->Attribute("value");
 
-            if (std::strcmp(pname, "name") == 0) {
-                if (pval) sprite_name = pval;
-
-            } else if (std::strcmp(pname, "dir") == 0) {
-                dir = parse_dir(pval);
-
-            } else if (std::strcmp(pname, "seq") == 0) {
-                seq = atoi_safe(pval, -1);
-
-            } else if (std::strcmp(pname, "size") == 0) {
-                // nested class: <property name="size"><properties>...</properties></property>
-                XMLElement* sub = p->FirstChildElement("properties");
-                if (!sub) continue;
-
-                for (XMLElement* sp = sub->FirstChildElement("property");
-                     sp;
-                     sp = sp->NextSiblingElement("property"))
-                {
-                    const char* sn = sp->Attribute("name");
-                    const char* sv = sp->Attribute("value");
-                    if (!sn || !sv) continue;
-
-                    if (std::strcmp(sn, "x") == 0) frame_w = atoi_safe(sv, frame_w);
-                    if (std::strcmp(sn, "y") == 0) frame_h = atoi_safe(sv, frame_h);
-                }
+            if ((std::strcmp(pname, "name") == 0 || std::strcmp(pname, "monster_name") == 0) && pval) {
+                sprite_name = pval;
             }
         }
 
         if (sprite_name.empty())
             continue;
 
-        // compute base tile position
         int col = id % columns_;
         int row = id / columns_;
+        Anchor& a = anchors[sprite_name];
+        if (a.id < 0 || row > a.row || (row == a.row && col < a.col)) {
+            a.id = id;
+            a.row = row;
+            a.col = col;
+        }
+    }
 
-        int base_x = col * tile_w_;
-        int base_y = row * tile_h_;
+    for (const auto& [name, anchor] : anchors) {
+        int size_w_tiles = 1;
+        int size_h_tiles = 2;
+        auto it = size_overrides.find(name);
+        if (it == size_overrides.end()) {
+            it = size_overrides.find(toLower(name));
+        }
+        if (it != size_overrides.end()) {
+            size_w_tiles = std::max(1, it->second.first);
+            size_h_tiles = std::max(1, it->second.second);
+        }
 
-        // compute top-left of full frame (supports any height multiple of tile_h_)
-        int tiles_high = frame_h / tile_h_;
-        if (tiles_high < 1) tiles_high = 1;
+        const int frame_w = size_w_tiles * tile_w_;
+        const int frame_h = size_h_tiles * tile_h_;
+        constexpr int frames_per_dir = 4;
 
-        int top_row = row - (tiles_high - 1);
-        if (top_row < 0) top_row = 0;
+        // Direction rows from top to bottom: S, E, N, W.
+        struct DirRow { Dir dir; int dir_idx; };
+        static constexpr DirRow rows[] = {
+            {Dir::S, 0}, {Dir::E, 1}, {Dir::N, 2}, {Dir::W, 3}
+        };
 
-        int src_x = base_x;
-        int src_y = top_row * tile_h_;
+        SpriteClips& sc = sprites_[name];
+        for (const auto& dr : rows) {
+            const int block_bottom_row = anchor.row - ((3 - dr.dir_idx) * size_h_tiles);
+            const int top_row = block_bottom_row - (size_h_tiles - 1);
+            if (top_row < 0 || top_row >= total_rows) continue;
+            if (top_row + size_h_tiles > total_rows) continue;
 
-        Frame fr(id, seq, src_x, src_y, frame_w, frame_h);
+            for (int frame_idx = 0; frame_idx < frames_per_dir; ++frame_idx) {
+                const int col_left = anchor.col + frame_idx * size_w_tiles;
+                if (col_left < 0) continue;
+                if (col_left + size_w_tiles > columns_) break;
 
-        SpriteClips& sc = sprites_[sprite_name];
-        clip(sc, dir).frames.push_back(fr);
+                const int src_x = col_left * tile_w_;
+                const int src_y = top_row * tile_h_;
+                const int pseudo_tile_id = block_bottom_row * columns_ + col_left;
+                clip(sc, dr.dir).frames.emplace_back(pseudo_tile_id, frame_idx, src_x, src_y, frame_w, frame_h);
+            }
+        }
+
+        // If a sheet does not provide all 4 directional strips yet, reuse any
+        // available strip so entities still render while art is in progress.
+        const Clip* fallback = nullptr;
+        if (!sc.s.frames.empty()) fallback = &sc.s;
+        else if (!sc.e.frames.empty()) fallback = &sc.e;
+        else if (!sc.n.frames.empty()) fallback = &sc.n;
+        else if (!sc.w.frames.empty()) fallback = &sc.w;
+        if (fallback) {
+            if (sc.s.frames.empty()) sc.s.frames = fallback->frames;
+            if (sc.e.frames.empty()) sc.e.frames = fallback->frames;
+            if (sc.n.frames.empty()) sc.n.frames = fallback->frames;
+            if (sc.w.frames.empty()) sc.w.frames = fallback->frames;
+        }
     }
 
     // sort each clip
@@ -280,4 +298,3 @@ void Sprites::debug_dump() const
 
     printf("===== END DEBUG DUMP =====\n\n");
 }
-

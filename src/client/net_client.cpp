@@ -54,6 +54,31 @@ void NetClient::recvLoop() {
             sendWire(peer, 0, wire);
             enet_host_flush(client);
         }
+        if (auto move = mailbox_.pop<MoveMsg>(MsgType::Move)) {
+            auto wire = pack(MsgType::Move, *move);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
+        if (auto atk = mailbox_.pop<AttackMsg>(MsgType::Attack)) {
+            auto wire = pack(MsgType::Attack, *atk);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
+        if (auto pick = mailbox_.pop<PickupMsg>(MsgType::Pickup)) {
+            auto wire = pack(MsgType::Pickup, *pick);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
+        if (auto drop = mailbox_.pop<DropMsg>(MsgType::Drop)) {
+            auto wire = pack(MsgType::Drop, *drop);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
+        if (auto swp = mailbox_.pop<InventorySwapMsg>(MsgType::InventorySwap)) {
+            auto wire = pack(MsgType::InventorySwap, *swp);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
 
         ENetEvent ev{};
         if (enet_host_service(client, &ev, 100) > 0) {
@@ -61,6 +86,14 @@ void NetClient::recvLoop() {
                 try {
                     Envelope env = fromBytes<Envelope>(ev.packet->data, ev.packet->dataLength);
                     switch (env.type) {
+                        case MsgType::Login:
+                        case MsgType::Move:
+                        case MsgType::Attack:
+                        case MsgType::Pickup:
+                        case MsgType::Drop:
+                        case MsgType::InventorySwap:
+                            // Client only expects server-originating state/response messages.
+                            break;
                         case MsgType::Room: {
                             std::cout << "got a room!";
                             Room room = fromBytes<Room>(env.payload.data(), env.payload.size());
@@ -77,6 +110,13 @@ void NetClient::recvLoop() {
                             mailbox_.push(MsgType::LoginResult, std::move(result));
                             break;
                         }
+                        case MsgType::GameState: {
+                            GameStateMsg state = fromBytes<GameStateMsg>(env.payload.data(), env.payload.size());
+                            mailbox_.push(MsgType::GameState, std::move(state));
+                            break;
+                        }
+                        default:
+                            break;
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "[client] decode error: " << e.what() << "\n";

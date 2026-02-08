@@ -3,24 +3,29 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include <string>
 
 #include "auth_db.h"
 #include "msg.h"
 #include "net_server.h"
 #include "world.h"
 
-int main() {
+int main(int argc, char** argv) {
     if (enet_initialize() != 0) {
         std::cerr << "ERROR: enet_initialize failed\n";
         return 1;
     }
 
-    World world("data/rooms/");
-    Mailbox mailbox;
+    uint16_t port = 7000;
+    if (argc >= 2) {
+        port = static_cast<uint16_t>(std::stoi(argv[1]));
+    }
+
+    World world("data/worlds");
 
     try {
         AuthDb auth_db("data/game.db");
-        NetServer ns(mailbox, world, auth_db, 7000);
+        NetServer ns(world, auth_db, port);
         ns.start();
 
         while (true) {

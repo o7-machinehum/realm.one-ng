@@ -46,6 +46,7 @@ bool RoomRenderer::load(const Room& room) {
     for (const auto& tsref : room.tilesets()) {
         RuntimeTileset rt;
         rt.first_gid = tsref.first_gid;
+        rt.drawable = (tsref.source_tsx != "properties.tsx");
 
         const std::filesystem::path tsxPath =
             std::filesystem::path("game/assets/art/") / tsref.source_tsx;
@@ -84,6 +85,7 @@ void RoomRenderer::draw(const Room& room, float scale, Vector2 origin) const {
     if (sets_.empty()) return;
 
     for (const auto& layer : room.layers()) {
+        if (layer.name == "Monsters") continue; // spawn metadata layer
         for (int y = 0; y < layer.height; y++) {
             for (int x = 0; x < layer.width; x++) {
                 uint32_t gid = layer.gids[y * layer.width + x];
@@ -92,6 +94,7 @@ void RoomRenderer::draw(const Room& room, float scale, Vector2 origin) const {
                 // NOTE: flip flags ignored for now
                 const RuntimeTileset* ts = find_tileset(gid);
                 if (!ts) continue;
+                if (!ts->drawable) continue;
 
                 int localId = (int)gid - ts->first_gid;
                 if (localId < 0) continue;

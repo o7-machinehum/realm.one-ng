@@ -23,16 +23,10 @@ int main()
     const int count = sprites.frame_count("player_1", Dir::S);
     if (count <= 0) return 1;
 
-    // Feet position on a 16x16 grid
-    float tile = 16.0f;
-    float feetX = 8 * tile;
-    float feetY = 8 * tile;
-
     // Animation
     int frameIndex = 0;
     float t = 0.0f;
     const float frameTime = 0.12f; // seconds per frame
-    const float scale = 2.0f;
 
     entities.create(sprites.get("player_1"), 0, 0);
     entities.create(sprites.get("player_1"), 10, 10);
@@ -49,9 +43,7 @@ int main()
             frameIndex = (frameIndex + 1) % count;
         }
 
-        const Frame* fr = sprites.frame("player_1", Dir::S, frameIndex);
-
-        Rectangle src = fr->rect();
+        (void)sprites.frame("player_1", Dir::S, frameIndex);
 
         BeginDrawing();
         ClearBackground(DARKGRAY);
