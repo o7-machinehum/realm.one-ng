@@ -90,6 +90,8 @@ void drawScene(const Room& room,
         Texture2D tex{};
         bool ready = false;
         AnimationComponent* anim = nullptr;
+        float rx = 0.0f;
+        float ry = 0.0f;
         Rectangle click_box{};
     };
     struct PlayerVisual {
@@ -144,21 +146,28 @@ void drawScene(const Room& room,
         auto& prev = scene_state.prev_pos_by_key[key];
         const int dx = m.x - prev.first;
         const int dy = m.y - prev.second;
+        const bool moved = (dx != 0 || dy != 0);
         anim.dir = dirFromDelta(dx, dy, anim.dir);
-        tickAnimation(anim, *mon_sprites, true, dt);
+        tickAnimation(anim, *mon_sprites, moved, dt);
         prev = {m.x, m.y};
+        const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
+                                        key,
+                                        m.x,
+                                        m.y,
+                                        dt,
+                                        cfg.monster_slide_tiles_per_sec);
 
         const float mw = std::max(1, m.sprite_w_tiles) * tile_w;
         const float mh = std::max(1, m.sprite_h_tiles) * tile_h;
-        const float cell_x = m.x * tile_w;
-        const float cell_y = (m.y - (std::max(1, m.sprite_h_tiles) - 1)) * tile_h;
+        const float cell_x = rx * tile_w;
+        const float cell_y = (ry - (std::max(1, m.sprite_h_tiles) - 1)) * tile_h;
         Rectangle click_box{cell_x, cell_y, mw, mh};
 
         monster_click_boxes.push_back({m.id, click_box});
         monster_visuals.push_back(MonsterVisual{
-            &m, mon_sprites, mon_tex, mon_ready, &anim, click_box
+            &m, mon_sprites, mon_tex, mon_ready, &anim, rx, ry, click_box
         });
-        draw_cmds.push_back(DrawCmd{m.y * tile_h, 0, monster_visuals.size() - 1});
+        draw_cmds.push_back(DrawCmd{ry * tile_h, 0, monster_visuals.size() - 1});
     }
 
     for (const auto& p : game_state.players) {
@@ -188,7 +197,7 @@ void drawScene(const Room& room,
         const auto& m = *mv.msg;
         if (game_state.attack_target_monster_id != m.id) continue;
         const float mw = std::max(1, m.sprite_w_tiles) * tile_w;
-        Rectangle feet_box{m.x * tile_w, m.y * tile_h, mw, tile_h};
+        Rectangle feet_box{mv.rx * tile_w, mv.ry * tile_h, mw, tile_h};
         DrawRectangleRec(feet_box, Fade(RED, 0.22f));
         DrawRectangleLinesEx(feet_box, 2.0f, RED);
     }
@@ -257,10 +266,10 @@ void drawScene(const Room& room,
             const auto& mv = monster_visuals[cmd.idx];
             const auto& m = *mv.msg;
             if (mv.ready) {
-                drawActor(*mv.sprites, mv.tex, *mv.anim, static_cast<float>(m.x), static_cast<float>(m.y), tile_w, tile_h, cfg.map_scale, PINK);
+                drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, PINK);
             } else {
-                const float x = m.x * tile_w + tile_w * 0.5f;
-                const float y = m.y * tile_h + tile_h * 0.5f;
+                const float x = mv.rx * tile_w + tile_w * 0.5f;
+                const float y = mv.ry * tile_h + tile_h * 0.5f;
                 DrawCircle(static_cast<int>(x), static_cast<int>(y), 10, RED);
             }
         } else {
@@ -307,8 +316,8 @@ void drawScene(const Room& room,
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
         drawHealthBar(mv.click_box.x, mv.click_box.y - 8, mv.click_box.width, m.hp, m.max_hp);
-        const float x = m.x * tile_w + tile_w * 0.5f;
-        const float y = m.y * tile_h + tile_h * 0.5f;
+        const float x = mv.rx * tile_w + tile_w * 0.5f;
+        const float y = mv.ry * tile_h + tile_h * 0.5f;
         drawUiText(ui_font, m.name, x + 12, y - 12, 13, ORANGE);
     }
 

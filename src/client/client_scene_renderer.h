@@ -26,6 +26,7 @@ struct SceneConfig {
     float inventory_panel_width = 260.0f;
     float bottom_panel_height = 180.0f;
     float player_slide_tiles_per_sec = 10.0f;
+    float monster_slide_tiles_per_sec = 8.0f;
 };
 
 struct SceneOutput {
