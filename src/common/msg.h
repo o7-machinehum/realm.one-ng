@@ -40,11 +40,12 @@ struct LoginMsg {
 
 struct ChatMsg {
     std::string from;
+    std::string speech_type; // talk / think / yell
     std::string text;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(from, text);
+        ar(from, speech_type, text);
     }
 };
 

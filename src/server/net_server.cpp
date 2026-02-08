@@ -825,9 +825,24 @@ void NetServer::recvLoop() {
                         } break;
 
                         case MsgType::Chat: {
+                            if (!player.authenticated) break;
                             ChatMsg m = fromBytes<ChatMsg>(env.payload.data(), env.payload.size());
-                            ChatMsg reply{"server", "echo: " + m.text};
-                            sendWire(ev.peer, 0, pack(MsgType::Chat, reply));
+                            std::string text = m.text;
+                            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front()))) text.erase(text.begin());
+                            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+                            if (text.empty()) break;
+                            if (text.size() > 120) text.resize(120);
+                            std::string speech_type = normalizeId(m.speech_type);
+                            if (speech_type != "talk" && speech_type != "think" && speech_type != "yell") {
+                                speech_type = "talk";
+                            }
+
+                            ChatMsg out{player.data.username, speech_type, text};
+                            for (const auto& [peer, p] : players) {
+                                if (!p.authenticated) continue;
+                                if (p.data.room != player.data.room) continue;
+                                sendWire(peer, 0, pack(MsgType::Chat, out));
+                            }
                             enet_host_flush(server);
                         } break;
 

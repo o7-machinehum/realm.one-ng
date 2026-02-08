@@ -3,11 +3,214 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <sstream>
 #include <vector>
 
 #include "rlgl.h"
 
 namespace client {
+namespace {
+
+constexpr int kSpeechCols = 9;
+constexpr float kSpeechTilePx = 16.0f;
+constexpr float kSpeechTextPadX = 8.0f;
+constexpr float kSpeechTextPadY = 6.0f;
+constexpr float kMonsterLabelFontSize = 16.0f;
+constexpr float kFallbackBubbleFontSize = 16.0f;
+constexpr float kUiBaseW = 1200.0f;
+constexpr float kUiBaseH = 760.0f;
+
+float uiScreenScale() {
+    const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
+    const float sy = static_cast<float>(GetScreenHeight()) / kUiBaseH;
+    return std::max(0.85f, std::min(2.2f, std::min(sx, sy)));
+}
+
+std::string lowerCopy(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+
+Rectangle speechSrcRect(int tile_id) {
+    const int tx = tile_id % kSpeechCols;
+    const int ty = tile_id / kSpeechCols;
+    return Rectangle{
+        tx * kSpeechTilePx,
+        ty * kSpeechTilePx,
+        kSpeechTilePx,
+        kSpeechTilePx
+    };
+}
+
+int speechTileId(const std::string& raw_type, char pos) {
+    const std::string type = lowerCopy(raw_type);
+    if (type == "think") {
+        switch (pos) {
+            case 'a': return 15;
+            case 'b': return 17;
+            case 'c': return 24;
+            case 'd': return 6;
+            case 'e': return 7;
+            case 'f': return 8;
+            case 'g': return 16;
+            case 'h': return 25;
+            case 'i': return 40;
+            case 'j': return 49;
+            case 't': return 26;
+            default: return 16;
+        }
+    }
+    if (type == "yell") {
+        switch (pos) {
+            case 'a': return 36;
+            case 'b': return 38;
+            case 'c': return 45;
+            case 'd': return 27;
+            case 'e': return 28;
+            case 'f': return 29;
+            case 'g': return 37;
+            case 'h': return 46;
+            case 'i': return 22;
+            case 'j': return 31;
+            case 't': return 47;
+            default: return 37;
+        }
+    }
+    // Default talk.
+    switch (pos) {
+        case 'a': return 9;
+        case 'b': return 11;
+        case 'c': return 18;
+        case 'd': return 0;
+        case 'e': return 1;
+        case 'f': return 2;
+        case 'g': return 10;
+        case 'h': return 19;
+        case 'i': return 4;
+        case 'j': return 13;
+        case 't': return 20;
+        default: return 10;
+    }
+}
+
+void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px) {
+    const Rectangle src = speechSrcRect(tile_id);
+    const Rectangle dst{x, y, size_px, size_px};
+    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
+}
+
+std::vector<std::string> wrapSpeechText(Font font,
+                                        const std::string& text,
+                                        float font_size,
+                                        float max_text_width) {
+    std::vector<std::string> out;
+    if (text.empty()) return out;
+    if (max_text_width <= 8.0f) {
+        out.push_back(text);
+        return out;
+    }
+
+    std::istringstream iss(text);
+    std::string word;
+    std::string line;
+    while (iss >> word) {
+        std::string candidate = line.empty() ? word : (line + " " + word);
+        const float w = MeasureTextEx(font, candidate.c_str(), font_size, 1.0f).x;
+        if (w <= max_text_width || line.empty()) {
+            line = std::move(candidate);
+        } else {
+            out.push_back(line);
+            line = word;
+        }
+    }
+    if (!line.empty()) out.push_back(std::move(line));
+    if (out.empty()) out.push_back(text);
+    return out;
+}
+
+void drawTalkBubble(Texture2D speech_tex,
+                    Font ui_font,
+                    const std::string& speech_type,
+                    const std::string& text,
+                    float head_x,
+                    float head_y,
+                    float map_scale,
+                    float map_view_width) {
+    if (speech_tex.id == 0 || text.empty()) return;
+
+    const float ui_scale = uiScreenScale();
+    const float tile_px = std::max(12.0f, std::round(map_scale * 16.0f));
+    const float font_size = std::max(14.0f, std::round(map_scale * 7.4f * ui_scale));
+    const float max_text_width = std::max(tile_px * 4.0f, map_view_width * 0.42f);
+    const std::vector<std::string> lines = wrapSpeechText(ui_font, text, font_size, max_text_width);
+
+    float max_line_w = 0.0f;
+    for (const auto& line : lines) {
+        max_line_w = std::max(max_line_w, MeasureTextEx(ui_font, line.c_str(), font_size, 1.0f).x);
+    }
+    const float line_h = MeasureTextEx(ui_font, "Ag", font_size, 1.0f).y;
+    const float text_block_h = line_h * static_cast<float>(lines.size()) + std::max(0.0f, static_cast<float>(lines.size() - 1)) * 1.0f;
+
+    const float inner_w_px = max_line_w + kSpeechTextPadX * 2.0f;
+    const float inner_h_px = text_block_h + kSpeechTextPadY * 2.0f;
+
+    const int inner_cols = std::max(1, static_cast<int>(std::ceil(inner_w_px / tile_px)));
+    const int mid_rows = std::max(1, static_cast<int>(std::ceil(inner_h_px / tile_px)));
+    const int cols = inner_cols + 2;
+    const int rows = 1 + mid_rows + 1;
+
+    const float bubble_w = cols * tile_px;
+    const float bubble_h = rows * tile_px;
+    const float bubble_x = head_x - bubble_w * 0.5f;
+    const float bubble_y = head_y - bubble_h - tile_px * 1.6f;
+
+    // Top: d e...e f
+    for (int c = 0; c < cols; ++c) {
+        const int id = (c == 0) ? speechTileId(speech_type, 'd')
+                                : ((c == cols - 1) ? speechTileId(speech_type, 'f')
+                                                   : speechTileId(speech_type, 'e'));
+        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bubble_y, tile_px);
+    }
+
+    // Mid rows: a g...g b
+    for (int r = 0; r < mid_rows; ++r) {
+        const float y = bubble_y + (1 + r) * tile_px;
+        for (int c = 0; c < cols; ++c) {
+            const int id = (c == 0) ? speechTileId(speech_type, 'a')
+                                    : ((c == cols - 1) ? speechTileId(speech_type, 'b')
+                                                       : speechTileId(speech_type, 'g'));
+            drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, y, tile_px);
+        }
+    }
+
+    // Bottom: c h... i ...h t
+    const float bottom_y = bubble_y + (rows - 1) * tile_px;
+    const int center_col = cols / 2;
+    for (int c = 0; c < cols; ++c) {
+        int id = speechTileId(speech_type, 'h');
+        if (c == 0) id = speechTileId(speech_type, 'c');
+        else if (c == cols - 1) id = speechTileId(speech_type, 't');
+        else if (c == center_col) id = speechTileId(speech_type, 'i');
+        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bottom_y, tile_px);
+    }
+
+    // Single "j" tail tile; head (O) is the target marker, not another bubble piece.
+    const float tail_x = bubble_x + center_col * tile_px;
+    const float tail_y = bottom_y + tile_px * 0.88f;
+    drawSpeechTile(speech_tex, speechTileId(speech_type, 'j'), tail_x, tail_y, tile_px);
+
+    const float text_top = bubble_y + (bubble_h - text_block_h) * 0.5f - tile_px * 0.15f;
+    for (size_t i = 0; i < lines.size(); ++i) {
+        const float lw = MeasureTextEx(ui_font, lines[i].c_str(), font_size, 1.0f).x;
+        const float text_x = bubble_x + (bubble_w - lw) * 0.5f;
+        const float text_y = text_top + static_cast<float>(i) * (line_h + 1.0f);
+        drawUiText(ui_font, lines[i], text_x, text_y, font_size, BLACK);
+    }
+}
+
+} // namespace
 
 std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
@@ -82,6 +285,8 @@ void drawScene(const Room& room,
                const Sprites& sprites,
                Texture2D character_tex,
                bool sprite_ready,
+               Texture2D speech_tex,
+               bool speech_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
                const std::function<ItemSheetView(const std::string&)>& item_sheet_view,
                Font ui_font,
@@ -382,20 +587,48 @@ void drawScene(const Room& room,
 
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
-        const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 8.0f;
+        const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 10.0f;
         drawHealthBar(mv.click_box.x, bar_y, mv.click_box.width, m.hp, m.max_hp);
-        const float name_w = MeasureTextEx(ui_font, m.name.c_str(), 13.0f, 1.0f).x;
-        drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - 14.0f, 13, ORANGE);
+        const float label_size = kMonsterLabelFontSize * uiScreenScale();
+        const float name_w = MeasureTextEx(ui_font, m.name.c_str(), label_size, 1.0f).x;
+        drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - (label_size + 3.0f), label_size, ORANGE);
     }
 
     for (const auto& pv : player_visuals) {
         const auto& p = *pv.msg;
         const float x = pv.rx * tile_w + tile_w * 0.5f;
         const float y = pv.ry * tile_h + tile_h * 0.5f;
-        Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 8.0f, tile_w, 5.0f};
+        Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 10.0f, tile_w, 5.0f};
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
-        const float name_w = MeasureTextEx(ui_font, p.user.c_str(), 13.0f, 1.0f).x;
-        drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - 14.0f, 13, RAYWHITE);
+        const float label_size = 13.0f * uiScreenScale();
+        const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
+        drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);
+
+        // "O" is treated as the player head anchor for bubble/tail placement.
+        auto sit = scene_state.speech_text_by_user.find(p.user);
+        auto yit = scene_state.speech_type_by_user.find(p.user);
+        auto tit = scene_state.speech_timer_by_user.find(p.user);
+        if (sit != scene_state.speech_text_by_user.end() &&
+            tit != scene_state.speech_timer_by_user.end() &&
+            tit->second > 0.0f &&
+            !sit->second.empty()) {
+            const float head_x = x + tile_w * 0.20f;
+            const float head_y = y - tile_h * 0.68f;
+            const std::string speech_type = (yit != scene_state.speech_type_by_user.end()) ? yit->second : "talk";
+            if (speech_ready && speech_tex.id != 0) {
+                drawTalkBubble(speech_tex, ui_font, speech_type, sit->second, head_x, head_y, cfg.map_scale, cfg.map_view_width);
+            } else {
+                const float font_size = kFallbackBubbleFontSize * uiScreenScale();
+                const Vector2 text_size = MeasureTextEx(ui_font, sit->second.c_str(), font_size, 1.0f);
+                const float bubble_w = std::max(32.0f, text_size.x + 14.0f);
+                const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
+                const float bubble_x = head_x - bubble_w * 0.5f;
+                const float bubble_y = head_y - bubble_h - 18.0f;
+                DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 255});
+                DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 255});
+                drawUiText(ui_font, sit->second, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
+            }
+        }
     }
 
     rlPopMatrix();
@@ -410,6 +643,17 @@ void drawScene(const Room& room,
                 }
             }
             out.attack_click = AttackMsg{target};
+        }
+    }
+
+    for (auto it = scene_state.speech_timer_by_user.begin(); it != scene_state.speech_timer_by_user.end();) {
+        it->second = std::max(0.0f, it->second - dt);
+        if (it->second <= 0.0f) {
+            scene_state.speech_text_by_user.erase(it->first);
+            scene_state.speech_type_by_user.erase(it->first);
+            it = scene_state.speech_timer_by_user.erase(it);
+        } else {
+            ++it;
         }
     }
 

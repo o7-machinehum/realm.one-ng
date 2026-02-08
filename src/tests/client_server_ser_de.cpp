@@ -97,7 +97,7 @@ static int runServer(uint16_t port) {
                                       << " text=" << m.text << "\n";
 
                             // Echo back
-                            ChatMsg reply{"server", "echo: " + m.text};
+                            ChatMsg reply{"server", "talk", "echo: " + m.text};
                             auto wire = pack(MsgType::Chat, reply);
                             sendWire(ev.peer, /*channel*/ 0, wire);
                             enet_host_flush(server);

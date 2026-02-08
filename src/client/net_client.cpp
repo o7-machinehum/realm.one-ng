@@ -59,6 +59,11 @@ void NetClient::recvLoop() {
             sendWire(peer, 0, wire);
             enet_host_flush(client);
         }
+        if (auto chat = mailbox_.pop<ChatMsg>(MsgType::Chat)) {
+            auto wire = pack(MsgType::Chat, *chat);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
         if (auto rot = mailbox_.pop<RotateMsg>(MsgType::Rotate)) {
             auto wire = pack(MsgType::Rotate, *rot);
             sendWire(peer, 0, wire);

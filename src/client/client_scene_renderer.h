@@ -19,6 +19,9 @@ struct SceneState {
     std::unordered_map<std::string, std::pair<float, float>> render_pos_by_key;
     std::unordered_map<std::string, uint32_t> last_attack_seq_by_key;
     std::unordered_map<std::string, float> attack_fx_timer_by_key;
+    std::unordered_map<std::string, std::string> speech_text_by_user;
+    std::unordered_map<std::string, std::string> speech_type_by_user;
+    std::unordered_map<std::string, float> speech_timer_by_user;
     int dragging_ground_item_id = -1;
     float attack_fx_t = 0.0f;
 };
@@ -57,6 +60,8 @@ void drawScene(const Room& room,
                const Sprites& sprites,
                Texture2D character_tex,
                bool sprite_ready,
+               Texture2D speech_tex,
+               bool speech_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
                const std::function<ItemSheetView(const std::string&)>& item_sheet_view,
                Font ui_font,

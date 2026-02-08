@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 #include <vector>
 
 namespace {
@@ -31,10 +32,11 @@ constexpr float kPlayViewportMaxHeightRatio = 0.88f;
 constexpr float kDockMarginTop = 10.0f;
 constexpr float kDockMarginRight = 10.0f;
 constexpr float kDockWindowGapY = 8.0f;
-constexpr float kInputOverlayHeight = 28.0f;
+constexpr float kInputOverlayHeight = 34.0f;
 constexpr float kInputOverlayMargin = 8.0f;
 constexpr float kInputTextOffsetX = 8.0f;
-constexpr float kInputTextOffsetY = 5.0f;
+constexpr float kInputTextOffsetY = 6.0f;
+constexpr float kInputFontSize = 19.0f;
 
 // Draws a compact labeled progress bar used by vitals/skills windows.
 void drawLabeledBar(Font font,
@@ -58,6 +60,29 @@ void drawLabeledBar(Font font,
                        14.0f,
                        RAYWHITE);
 }
+
+bool parseSpeechInput(const std::string& input, ChatMsg& out) {
+    std::istringstream iss(input);
+    std::string cmd;
+    iss >> cmd;
+
+    if (cmd == "/yell" || cmd == "!") out.speech_type = "yell";
+    else if (cmd == "/think" || cmd == ".") out.speech_type = "think";
+    else if (cmd == "/talk" || cmd == "/say") out.speech_type = "talk";
+    else if (!input.empty() && input.front() != '/') out.speech_type = "talk";
+    else return false;
+
+    if (cmd == "/yell" || cmd == "/think" || cmd == "/talk" || cmd == "/say") {
+        std::string rest;
+        std::getline(iss, rest);
+        if (!rest.empty() && rest.front() == ' ') rest.erase(rest.begin());
+        out.text = rest;
+    } else {
+        out.text = input;
+    }
+    out.from.clear();
+    return !out.text.empty();
+}
 } // namespace
 
 // Owns the client runtime: input, networking mailbox pump, and frame rendering.
@@ -77,7 +102,9 @@ int main(int argc, char** argv) {
 
     Sprites sprites;
     Texture2D character_tex{};
+    Texture2D speech_tex{};
     bool sprite_ready = false;
+    bool speech_ready = false;
     Sprites::SizeOverrideMap player_size_overrides;
     player_size_overrides["player_1"] = {1, 2};
     if (sprites.loadTSX("game/assets/art/character.tsx", player_size_overrides)) {
@@ -87,6 +114,8 @@ int main(int argc, char** argv) {
     }
     bool owns_ui_font = false;
     Font ui_font = client::loadUIFont(owns_ui_font);
+    speech_tex = LoadTexture("game/assets/art/speech.png");
+    speech_ready = (speech_tex.id != 0);
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
@@ -105,6 +134,7 @@ int main(int argc, char** argv) {
     bool move_repeat_started = false;
     float rotate_repeat_timer = 0.0f;
     bool rotate_repeat_started = false;
+    bool chat_input_active = false;
 
     const client::SceneConfig scene_cfg{};
     const client::InventoryUiConfig inventory_cfg{};
@@ -118,47 +148,57 @@ int main(int argc, char** argv) {
     }
 
     while (!WindowShouldClose()) {
-        while (int key = GetCharPressed()) {
-            if (key >= 32 && key <= 126 && input.size() < kMaxInputChars) {
-                input.push_back(static_cast<char>(key));
+        if (chat_input_active) {
+            while (int key = GetCharPressed()) {
+                if (key >= 32 && key <= 126 && input.size() < kMaxInputChars) {
+                    input.push_back(static_cast<char>(key));
+                }
             }
         }
 
-        if (IsKeyPressed(KEY_BACKSPACE) && !input.empty()) {
+        if (chat_input_active && IsKeyPressed(KEY_BACKSPACE) && !input.empty()) {
             input.pop_back();
         }
 
         if (IsKeyPressed(KEY_ENTER)) {
-            if (!input.empty()) {
-                LoginMsg login;
-                PickupMsg pickup;
-                DropMsg drop;
-                MoveMsg move;
-                AttackMsg attack;
+            if (!chat_input_active) {
+                chat_input_active = true;
+                input.clear();
+            } else {
+                if (!input.empty()) {
+                    LoginMsg login;
+                    PickupMsg pickup;
+                    DropMsg drop;
+                    MoveMsg move;
+                    AttackMsg attack;
 
-                if (client::tryParseLogin(input, login)) {
-                    mailbox.push(MsgType::Login, login);
-                    client::pushBounded(logs, "Sent /login for " + login.user);
-                } else if (client::tryParsePickup(input, pickup)) {
-                    mailbox.push(MsgType::Pickup, pickup);
-                    client::pushBounded(logs, "Pickup requested");
-                } else if (client::tryParseDrop(input, drop)) {
-                    mailbox.push(MsgType::Drop, drop);
-                    client::pushBounded(logs, "Drop requested");
-                } else if (client::tryParseMove(input, move)) {
-                    mailbox.push(MsgType::Move, move);
-                } else if (client::tryParseAttack(input, attack)) {
-                    mailbox.push(MsgType::Attack, attack);
-                } else if (input == "/help") {
-                    client::pushBounded(logs, "Commands: /login /move /pickup [id] /drop <idx> /attack [monster_id]");
-                } else {
-                    client::pushBounded(logs, "Unknown command. Use /help");
+                    if (client::tryParseLogin(input, login)) {
+                        mailbox.push(MsgType::Login, login);
+                        client::pushBounded(logs, "Sent /login for " + login.user);
+                    } else if (client::tryParsePickup(input, pickup)) {
+                        mailbox.push(MsgType::Pickup, pickup);
+                        client::pushBounded(logs, "Pickup requested");
+                    } else if (client::tryParseDrop(input, drop)) {
+                        mailbox.push(MsgType::Drop, drop);
+                        client::pushBounded(logs, "Drop requested");
+                    } else if (client::tryParseMove(input, move)) {
+                        mailbox.push(MsgType::Move, move);
+                    } else if (client::tryParseAttack(input, attack)) {
+                        mailbox.push(MsgType::Attack, attack);
+                    } else if (input == "/help") {
+                        client::pushBounded(logs, "Commands: /login /move /pickup [id] /drop <idx> /attack [id] /talk /think /yell");
+                    } else {
+                        ChatMsg chat{};
+                        if (parseSpeechInput(input, chat)) mailbox.push(MsgType::Chat, chat);
+                        else client::pushBounded(logs, "Unknown command. Use /help");
+                    }
                 }
+                input.clear();
+                chat_input_active = false;
             }
-            input.clear();
         }
 
-        if (game_state.has_value()) {
+        if (game_state.has_value() && !chat_input_active) {
             int mx = 0;
             int my = 0;
             if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) my = -1;
@@ -210,6 +250,17 @@ int main(int argc, char** argv) {
         if (auto login = mailbox.pop<LoginResultMsg>(MsgType::LoginResult)) {
             (void)login;
         }
+        if (auto chat = mailbox.pop<ChatMsg>(MsgType::Chat)) {
+            const std::string from = chat->from.empty()
+                ? (game_state ? game_state->your_user : std::string{})
+                : chat->from;
+            if (!from.empty() && !chat->text.empty()) {
+                scene_state.speech_text_by_user[from] = chat->text;
+                scene_state.speech_type_by_user[from] = chat->speech_type.empty() ? "talk" : chat->speech_type;
+                scene_state.speech_timer_by_user[from] = 3.5f;
+                client::pushBounded(logs, from + ": " + chat->text);
+            }
+        }
 
         if (auto room = mailbox.pop<Room>(MsgType::Room)) {
             current_room = std::move(*room);
@@ -219,6 +270,9 @@ int main(int argc, char** argv) {
             scene_state.anim_by_key.clear();
             scene_state.last_attack_seq_by_key.clear();
             scene_state.attack_fx_timer_by_key.clear();
+            scene_state.speech_text_by_user.clear();
+            scene_state.speech_type_by_user.clear();
+            scene_state.speech_timer_by_user.clear();
             scene_state.dragging_ground_item_id = -1;
         }
 
@@ -231,6 +285,9 @@ int main(int argc, char** argv) {
                 scene_state.anim_by_key.clear();
                 scene_state.last_attack_seq_by_key.clear();
                 scene_state.attack_fx_timer_by_key.clear();
+                scene_state.speech_text_by_user.clear();
+                scene_state.speech_type_by_user.clear();
+                scene_state.speech_timer_by_user.clear();
                 scene_state.dragging_ground_item_id = -1;
             }
             last_game_state_room = game_state->your_room;
@@ -332,6 +389,8 @@ int main(int argc, char** argv) {
                               sprites,
                               character_tex,
                               sprite_ready,
+                              speech_tex,
+                              speech_ready,
                               monster_sheet_view,
                               item_sheet_view,
                               ui_font,
@@ -478,8 +537,19 @@ int main(int argc, char** argv) {
                            play_w - static_cast<int>(kInputOverlayMargin * 2.0f),
                            static_cast<int>(input_h),
                            Color{90, 90, 90, 220});
-        const std::string prompt = "> " + input;
-        client::drawUiText(ui_font, prompt, static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX, input_y + kInputTextOffsetY, 16, YELLOW);
+        if (chat_input_active) {
+            SetMouseCursor(MOUSE_CURSOR_IBEAM);
+        }
+        const bool blink_on = (static_cast<int>(GetTime() * 2.0) % 2) == 0;
+        const std::string prefix = chat_input_active ? "> " : "[Enter] Chat: ";
+        const std::string caret = (chat_input_active && blink_on) ? "_" : "";
+        const std::string prompt = prefix + input + caret;
+        client::drawUiText(ui_font,
+                           prompt,
+                           static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX,
+                           input_y + kInputTextOffsetY,
+                           kInputFontSize,
+                           chat_input_active ? YELLOW : LIGHTGRAY);
 
         EndDrawing();
     }
@@ -488,6 +558,7 @@ int main(int argc, char** argv) {
     client::unloadSheetCache(monster_sheet_cache);
     client::unloadSheetCache(item_sheet_cache);
     if (owns_ui_font) UnloadFont(ui_font);
+    if (speech_tex.id != 0) UnloadTexture(speech_tex);
     if (character_tex.id != 0) UnloadTexture(character_tex);
     CloseWindow();
     return 0;
