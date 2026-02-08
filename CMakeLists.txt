@@ -35,6 +35,7 @@ add_executable(client
     src/client/client_support.cpp
     src/client/client_scene_renderer.cpp
     src/client/client_inventory_ui.cpp
+    src/client/client_windows.cpp
     src/client/net_client.cpp
     src/server/monster_defs.cpp
 )

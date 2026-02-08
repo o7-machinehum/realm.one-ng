@@ -646,8 +646,14 @@ void NetServer::recvLoop() {
 
                             const int idx = findPickupCandidateIndex(player, m.item_id);
 
-                std::string event = player.data.username + " found no item";
+                            constexpr int kInventoryLimit = 8;
+                            std::string event = player.data.username + " found no item";
                             if (idx >= 0) {
+                                if (static_cast<int>(player.data.inventory.size()) >= kInventoryLimit) {
+                                    event = player.data.username + " inventory is full";
+                                    broadcastState(event);
+                                    break;
+                                }
                                 if (parseCorpseMonsterId(items[idx].item_id).empty()) {
                                     player.data.inventory.push_back(items[idx].name);
                                 } else {

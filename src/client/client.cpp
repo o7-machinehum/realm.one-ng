@@ -3,6 +3,7 @@
 #include "client_support.h"
 #include "client_inventory_ui.h"
 #include "client_scene_renderer.h"
+#include "client_windows.h"
 #include "msg.h"
 #include "monster_defs.h"
 #include "net_client.h"
@@ -20,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 namespace {
 struct SpriteSheetCacheEntry {
@@ -99,6 +101,28 @@ std::string parseCorpseMonsterId(const std::string& raw) {
     if (n.rfind(prefix, 0) != 0) return {};
     return n.substr(prefix.size());
 }
+
+void drawLabeledBar(Font font,
+                    const std::string& label,
+                    float x,
+                    float y,
+                    float w,
+                    float h,
+                    int value,
+                    int max_value,
+                    Color fill) {
+    DrawRectangle(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h), Color{30, 32, 36, 230});
+    DrawRectangleLines(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h), Color{90, 100, 110, 255});
+    const float pct = (max_value > 0) ? std::max(0.0f, std::min(1.0f, static_cast<float>(value) / static_cast<float>(max_value))) : 0.0f;
+    const float fill_w = std::max(0.0f, (w - 2.0f) * pct);
+    DrawRectangle(static_cast<int>(x + 1), static_cast<int>(y + 1), static_cast<int>(fill_w), static_cast<int>(h - 2.0f), fill);
+    client::drawUiText(font,
+                       TextFormat("%s %d/%d", label.c_str(), value, max_value),
+                       x + 8.0f,
+                       y + 3.0f,
+                       14.0f,
+                       RAYWHITE);
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -136,6 +160,7 @@ int main(int argc, char** argv) {
     std::string last_event;
     client::SceneState scene_state;
     client::InventoryUiState inventory_ui_state;
+    client::UiWindowsState ui_windows_state;
     std::unordered_map<std::string, SpriteSheetCacheEntry> monster_sheet_cache;
     std::unordered_map<std::string, SpriteSheetCacheEntry> item_sheet_cache;
     std::unordered_map<std::string, ItemUiDef> item_defs_by_key;
@@ -155,9 +180,6 @@ int main(int argc, char** argv) {
     for (const auto& def : loadMonsterDefs("game/monsters")) {
         monster_defs_by_id[toLower(def.id)] = def;
     }
-
-    client::pushBounded(logs, "Type /login <user> <pass>.");
-    client::pushBounded(logs, "Controls: arrows/WASD move, right-click monster to attack, G pickup, B drop slot 0.");
 
     while (!WindowShouldClose()) {
         while (int key = GetCharPressed()) {
@@ -250,11 +272,7 @@ int main(int argc, char** argv) {
         }
 
         if (auto login = mailbox.pop<LoginResultMsg>(MsgType::LoginResult)) {
-            if (login->ok) {
-                client::pushBounded(logs, "Login success: " + login->user + " room=" + login->room);
-            } else {
-                client::pushBounded(logs, "Login failed: " + login->message);
-            }
+            (void)login;
         }
 
         if (auto room = mailbox.pop<Room>(MsgType::Room)) {
@@ -385,7 +403,6 @@ int main(int argc, char** argv) {
             }
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
                 last_event = game_state->event_text;
-                client::pushBounded(logs, game_state->event_text);
             }
         }
 
@@ -393,33 +410,105 @@ int main(int argc, char** argv) {
         ClearBackground(BLACK);
 
         const int side_w = static_cast<int>(inventory_cfg.panel_w);
-        const int bottom_h = inventory_cfg.bottom_panel_height;
-        const int play_w = std::max(1, GetScreenWidth() - side_w);
-        const int play_h = std::max(1, GetScreenHeight() - bottom_h);
-        const Rectangle play_rect{0.0f, 0.0f, static_cast<float>(play_w), static_cast<float>(play_h)};
-        DrawRectangleRec(play_rect, BLACK);
-        float render_scale = scene_cfg.map_scale;
+        const int bottom_h = 0;
+        const int left_region_w = std::max(1, GetScreenWidth() - side_w);
+        const int left_region_h = std::max(1, GetScreenHeight() - bottom_h);
+        const int max_play_w = std::max(1, static_cast<int>(left_region_w * 0.92f));
+        const int max_play_h = std::max(1, static_cast<int>(left_region_h * 0.88f));
+        float map_px_w = 0.0f;
+        float map_px_h = 0.0f;
+        float map_aspect = static_cast<float>(max_play_w) / static_cast<float>(max_play_h);
         if (current_room) {
-            const float map_px_w = static_cast<float>(current_room->map_width() * current_room->tile_width());
-            const float map_px_h = static_cast<float>(current_room->map_height() * current_room->tile_height());
+            map_px_w = static_cast<float>(current_room->map_width() * current_room->tile_width());
+            map_px_h = static_cast<float>(current_room->map_height() * current_room->tile_height());
             if (map_px_w > 0.0f && map_px_h > 0.0f) {
-                const float fill_width_scale = static_cast<float>(play_w) / map_px_w;
-                render_scale = std::max(0.5f, fill_width_scale);
+                map_aspect = map_px_w / map_px_h;
             }
         }
-
-        BeginScissorMode(0, 0, play_w, play_h);
+        int play_w = max_play_w;
+        int play_h = std::max(1, static_cast<int>(std::lround(play_w / map_aspect)));
+        if (play_h > max_play_h) {
+            play_h = max_play_h;
+            play_w = std::max(1, static_cast<int>(std::lround(play_h * map_aspect)));
+        }
+        const int play_x = std::max(0, (left_region_w - play_w) / 2);
+        const int play_y = std::max(0, (left_region_h - play_h) / 2);
+        const Rectangle play_rect{
+            static_cast<float>(play_x),
+            static_cast<float>(play_y),
+            static_cast<float>(play_w),
+            static_cast<float>(play_h)
+        };
+        const float right_x = static_cast<float>(GetScreenWidth()) - inventory_cfg.panel_w - 10.0f;
+        auto& vitals_window = client::ensureWindow(ui_windows_state, "vitals", "Health / Mana", Rectangle{right_x, 10.0f, inventory_cfg.panel_w, 106.0f}, true);
+        auto& inventory_window = client::ensureWindow(ui_windows_state, "inventory", "Inventory", Rectangle{right_x, 126.0f, inventory_cfg.panel_w, 420.0f}, true);
+        auto& skills_window = client::ensureWindow(ui_windows_state, "skills", "Skills", Rectangle{right_x, 556.0f, inventory_cfg.panel_w, 174.0f}, true);
+        constexpr int kInvSlotLimit = 8;
+        const int inv_rows = std::max(1, (kInvSlotLimit + inventory_cfg.cols - 1) / inventory_cfg.cols);
+        const float inv_body_h = 12.0f + inv_rows * inventory_cfg.slot_size + (inv_rows - 1) * inventory_cfg.gap + 12.0f;
+        inventory_window.rect.height = client::kUiWindowHeaderHeight + inv_body_h;
+        vitals_window.rect.width = inventory_cfg.panel_w;
+        inventory_window.rect.width = inventory_cfg.panel_w;
+        skills_window.rect.width = inventory_cfg.panel_w;
+        vitals_window.rect.x = right_x;
+        inventory_window.rect.x = right_x;
+        skills_window.rect.x = right_x;
+        if (ui_windows_state.dragging_id.empty()) {
+            std::vector<client::UiWindow*> stack{&vitals_window, &inventory_window, &skills_window};
+            std::sort(stack.begin(), stack.end(), [](const client::UiWindow* a, const client::UiWindow* b) {
+                return a->rect.y < b->rect.y;
+            });
+            float y = 10.0f;
+            constexpr float gap = 8.0f;
+            for (client::UiWindow* w : stack) {
+                w->rect.x = right_x;
+                w->rect.y = y;
+                y += client::windowFrameHeight(*w) + gap;
+            }
+        }
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 22, 255});
+        DrawRectangleRec(play_rect, BLACK);
+        DrawRectangleLinesEx(play_rect, 1.0f, Color{72, 76, 84, 255});
+        float render_scale = scene_cfg.map_scale;
+        float map_draw_w = static_cast<float>(play_w);
+        float map_draw_h = static_cast<float>(play_h);
+        float map_off_x = 0.0f;
+        float map_off_y = 0.0f;
         if (current_room) {
-            rr.drawUnderEntities(*current_room, render_scale);
+            if (map_px_w > 0.0f && map_px_h > 0.0f) {
+                const float fill_width_scale = static_cast<float>(play_w) / map_px_w;
+                const float fill_height_scale = static_cast<float>(play_h) / map_px_h;
+                const float fit_scale = std::min(fill_width_scale, fill_height_scale);
+                render_scale = std::max(0.5f, fit_scale);
+                map_draw_w = map_px_w * render_scale;
+                map_draw_h = map_px_h * render_scale;
+                map_off_x = std::max(0.0f, (static_cast<float>(play_w) - map_draw_w) * 0.5f);
+                map_off_y = std::max(0.0f, (static_cast<float>(play_h) - map_draw_h) * 0.5f);
+            }
+        }
+        const float map_origin_x = static_cast<float>(play_x) + map_off_x;
+        const float map_origin_y = static_cast<float>(play_y) + map_off_y;
+
+        BeginScissorMode(play_x, play_y, play_w, play_h);
+        if (current_room) {
+            rr.drawUnderEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
         }
 
         if (current_room && game_state) {
             client::SceneOutput scene_out{};
             client::SceneConfig draw_cfg = scene_cfg;
             draw_cfg.map_scale = render_scale;
+            draw_cfg.map_origin_x = map_origin_x;
+            draw_cfg.map_origin_y = map_origin_y;
+            draw_cfg.map_view_width = map_draw_w;
+            draw_cfg.map_view_height = map_draw_h;
             draw_cfg.inventory_panel_width = inventory_cfg.panel_w;
+            draw_cfg.inventory_top_offset = inventory_window.rect.y;
+            draw_cfg.inventory_drop_rect = inventory_window.collapsed
+                ? Rectangle{0, 0, 0, 0}
+                : inventory_window.rect;
             draw_cfg.bottom_panel_height = static_cast<float>(bottom_h);
-            draw_cfg.inventory_visible = true;
+            draw_cfg.inventory_visible = !inventory_window.collapsed;
             const auto monster_sheet_view = [&](const std::string& tsx) -> client::SpriteSheetView {
                 auto it = monster_sheet_cache.find(tsx);
                 if (it == monster_sheet_cache.end()) return {};
@@ -462,11 +551,24 @@ int main(int argc, char** argv) {
 
         }
         if (current_room) {
-            rr.drawAboveEntities(*current_room, render_scale);
+            rr.drawAboveEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
         }
         EndScissorMode();
 
         if (game_state) {
+            const auto vitals_frame = client::drawWindowFrame(ui_windows_state, ui_font, vitals_window);
+            const auto inv_frame = client::drawWindowFrame(ui_windows_state, ui_font, inventory_window);
+            const auto skills_frame = client::drawWindowFrame(ui_windows_state, ui_font, skills_window);
+
+            if (vitals_frame.open) {
+                const float pad = 10.0f;
+                const float bar_w = std::max(80.0f, vitals_frame.body_rect.width - pad * 2.0f);
+                const float bx = vitals_frame.body_rect.x + (vitals_frame.body_rect.width - bar_w) * 0.5f;
+                const float by = vitals_frame.body_rect.y + 10.0f;
+                drawLabeledBar(ui_font, "HP", bx, by, bar_w, 22.0f, game_state->your_hp, game_state->your_max_hp, Color{115, 38, 38, 255});
+                drawLabeledBar(ui_font, "MP", bx, by + 30.0f, bar_w, 22.0f, game_state->your_mana, game_state->your_max_mana, Color{50, 80, 160, 255});
+            }
+
             client::InventoryUiOutput inv_out{};
             const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect) -> bool {
                 auto dit = item_defs_by_key.find(toLower(item_name));
@@ -510,13 +612,32 @@ int main(int argc, char** argv) {
                 if (dit == item_defs_by_key.end()) return {};
                 return dit->second.equip_type;
             };
-            client::drawInventoryUi(ui_font,
-                                    *game_state,
-                                    inventory_ui_state,
-                                    inventory_cfg,
-                                    draw_inventory_icon,
-                                    resolve_item_equip_type,
-                                    inv_out);
+
+            if (inv_frame.open) {
+                client::drawInventoryUi(ui_font,
+                                        *game_state,
+                                        inventory_ui_state,
+                                        inventory_cfg,
+                                        inv_frame.body_rect,
+                                        draw_inventory_icon,
+                                        resolve_item_equip_type,
+                                        inv_out);
+            }
+
+            if (skills_frame.open) {
+                const float pad = 10.0f;
+                const float bar_w = std::max(80.0f, skills_frame.body_rect.width - pad * 2.0f);
+                const float bx = skills_frame.body_rect.x + (skills_frame.body_rect.width - bar_w) * 0.5f;
+                float by = skills_frame.body_rect.y + 8.0f;
+                drawLabeledBar(ui_font, "Sword", bx, by, bar_w, 18.0f, 20, 100, Color{122, 89, 46, 255});
+                by += 23.0f;
+                drawLabeledBar(ui_font, "Shield", bx, by, bar_w, 18.0f, 18, 100, Color{80, 104, 142, 255});
+                by += 23.0f;
+                drawLabeledBar(ui_font, "Magic", bx, by, bar_w, 18.0f, 12, 100, Color{88, 66, 143, 255});
+                by += 23.0f;
+                drawLabeledBar(ui_font, "Range", bx, by, bar_w, 18.0f, 9, 100, Color{72, 126, 80, 255});
+            }
+
             if (inv_out.swap_msg.has_value()) {
                 mailbox.push(MsgType::InventorySwap, *inv_out.swap_msg);
             }
@@ -524,14 +645,14 @@ int main(int argc, char** argv) {
                 DropMsg drop = *inv_out.drop_msg;
                 if (current_room) {
                     const Vector2 m = GetMousePosition();
-                    if (m.x >= 0.0f && m.y >= 0.0f &&
-                        m.x < static_cast<float>(play_w) &&
-                        m.y < static_cast<float>(play_h)) {
+                    if (m.x >= map_origin_x && m.y >= map_origin_y &&
+                        m.x < (map_origin_x + map_draw_w) &&
+                        m.y < (map_origin_y + map_draw_h)) {
                         const float tile_w = current_room->tile_width() * render_scale;
                         const float tile_h = current_room->tile_height() * render_scale;
                         if (tile_w > 0.0f && tile_h > 0.0f) {
-                            drop.to_x = static_cast<int>(std::floor(m.x / tile_w));
-                            drop.to_y = static_cast<int>(std::floor(m.y / tile_h));
+                            drop.to_x = static_cast<int>(std::floor((m.x - map_origin_x) / tile_w));
+                            drop.to_y = static_cast<int>(std::floor((m.y - map_origin_y) / tile_h));
                         }
                     }
                 }
@@ -542,17 +663,12 @@ int main(int argc, char** argv) {
             }
         }
 
-        DrawRectangle(0, GetScreenHeight() - inventory_cfg.bottom_panel_height, GetScreenWidth(), inventory_cfg.bottom_panel_height, Fade(BLACK, 0.88f));
-        DrawRectangleLines(0, GetScreenHeight() - inventory_cfg.bottom_panel_height, GetScreenWidth(), inventory_cfg.bottom_panel_height, GRAY);
-
-        int y = GetScreenHeight() - inventory_cfg.bottom_panel_height + 24;
-        for (const auto& line : logs) {
-            client::drawUiText(ui_font, line, 10, static_cast<float>(y), 15, RAYWHITE);
-            y += 19;
-        }
-
+        const float input_h = 28.0f;
+        const float input_y = static_cast<float>(play_y + play_h) - input_h - 8.0f;
+        DrawRectangle(play_x + 8, static_cast<int>(input_y), play_w - 16, static_cast<int>(input_h), Color{0, 0, 0, 150});
+        DrawRectangleLines(play_x + 8, static_cast<int>(input_y), play_w - 16, static_cast<int>(input_h), Color{90, 90, 90, 220});
         const std::string prompt = "> " + input;
-        client::drawUiText(ui_font, prompt, 10, static_cast<float>(GetScreenHeight() - 32), 17, YELLOW);
+        client::drawUiText(ui_font, prompt, static_cast<float>(play_x + 16), input_y + 5.0f, 16, YELLOW);
 
         EndDrawing();
     }

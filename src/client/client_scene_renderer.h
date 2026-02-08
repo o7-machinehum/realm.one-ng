@@ -25,7 +25,13 @@ struct SceneState {
 
 struct SceneConfig {
     float map_scale = 2.0f;
+    float map_origin_x = 0.0f;
+    float map_origin_y = 0.0f;
+    float map_view_width = 0.0f;
+    float map_view_height = 0.0f;
     float inventory_panel_width = 260.0f;
+    float inventory_top_offset = 72.0f;
+    Rectangle inventory_drop_rect{0, 0, 0, 0};
     float bottom_panel_height = 180.0f;
     bool inventory_visible = true;
     float player_slide_tiles_per_sec = 10.0f;

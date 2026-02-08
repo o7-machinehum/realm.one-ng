@@ -5,6 +5,8 @@
 #include <cmath>
 #include <vector>
 
+#include "rlgl.h"
+
 namespace client {
 
 std::string toLower(std::string s) {
@@ -234,16 +236,6 @@ void drawScene(const Room& room,
         draw_cmds.push_back(DrawCmd{ry * tile_h, 1, player_visuals.size() - 1});
     }
 
-    // Ground-space attack marker (behind sprites).
-    for (const auto& mv : monster_visuals) {
-        const auto& m = *mv.msg;
-        if (game_state.attack_target_monster_id != m.id) continue;
-        const float mw = std::max(1, m.sprite_w_tiles) * tile_w;
-        Rectangle feet_box{mv.rx * tile_w, mv.ry * tile_h, mw, tile_h};
-        DrawRectangleRec(feet_box, Fade(RED, 0.22f));
-        DrawRectangleLinesEx(feet_box, 2.0f, RED);
-    }
-
     auto findTopItemAt = [&](Vector2 mouse) -> int {
         for (auto it = ground_items.rbegin(); it != ground_items.rend(); ++it) {
             if (CheckCollisionPointRec(mouse, it->tile_box)) return it->msg->id;
@@ -251,25 +243,29 @@ void drawScene(const Room& room,
         return -1;
     };
 
+    const float map_ox = cfg.map_origin_x;
+    const float map_oy = cfg.map_origin_y;
+    const float map_vw = cfg.map_view_width > 0.0f ? cfg.map_view_width : (cfg.inventory_visible ? (GetScreenWidth() - cfg.inventory_panel_width) : static_cast<float>(GetScreenWidth()));
+    const float map_vh = cfg.map_view_height > 0.0f ? cfg.map_view_height : (GetScreenHeight() - cfg.bottom_panel_height);
     const Vector2 mouse = GetMousePosition();
-    const float inv_panel_x = static_cast<float>(GetScreenWidth()) - cfg.inventory_panel_width;
+    const Vector2 mouse_local{mouse.x - map_ox, mouse.y - map_oy};
+    const bool has_inventory_drop_rect = cfg.inventory_drop_rect.width > 0.0f && cfg.inventory_drop_rect.height > 0.0f;
     const bool mouse_in_inventory = cfg.inventory_visible &&
-                                    mouse.x >= inv_panel_x &&
-                                    mouse.y >= 0.0f &&
-                                    mouse.y < (GetScreenHeight() - cfg.bottom_panel_height);
-    const bool mouse_in_map = mouse.x >= 0.0f &&
-                              mouse.y >= 0.0f &&
-                              mouse.x < (cfg.inventory_visible ? inv_panel_x : static_cast<float>(GetScreenWidth())) &&
-                              mouse.y < (GetScreenHeight() - cfg.bottom_panel_height);
-    const int hovered_item_id = mouse_in_map ? findTopItemAt(mouse) : -1;
+                                    has_inventory_drop_rect &&
+                                    CheckCollisionPointRec(mouse, cfg.inventory_drop_rect);
+    const bool mouse_in_map = mouse.x >= map_ox &&
+                              mouse.y >= map_oy &&
+                              mouse.x < (map_ox + map_vw) &&
+                              mouse.y < (map_oy + map_vh);
+    const int hovered_item_id = mouse_in_map ? findTopItemAt(mouse_local) : -1;
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && scene_state.dragging_ground_item_id < 0 && hovered_item_id >= 0) {
         scene_state.dragging_ground_item_id = hovered_item_id;
     }
     if (scene_state.dragging_ground_item_id >= 0 && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         if (mouse_in_map) {
-            const int tx = static_cast<int>(std::floor(mouse.x / tile_w));
-            const int ty = static_cast<int>(std::floor(mouse.y / tile_h));
+            const int tx = static_cast<int>(std::floor(mouse_local.x / tile_w));
+            const int ty = static_cast<int>(std::floor(mouse_local.y / tile_h));
             out.move_ground_item = MoveGroundItemMsg{scene_state.dragging_ground_item_id, tx, ty};
         } else if (mouse_in_inventory) {
             out.pickup_ground_item = PickupMsg{scene_state.dragging_ground_item_id};
@@ -280,6 +276,19 @@ void drawScene(const Room& room,
         SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
     } else {
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    }
+
+    rlPushMatrix();
+    rlTranslatef(map_ox, map_oy, 0.0f);
+
+    // Ground-space attack marker (behind sprites).
+    for (const auto& mv : monster_visuals) {
+        const auto& m = *mv.msg;
+        if (game_state.attack_target_monster_id != m.id) continue;
+        const float mw = std::max(1, m.sprite_w_tiles) * tile_w;
+        Rectangle feet_box{mv.rx * tile_w, mv.ry * tile_h, mw, tile_h};
+        DrawRectangleRec(feet_box, Fade(RED, 0.22f));
+        DrawRectangleLinesEx(feet_box, 2.0f, RED);
     }
 
     for (const auto& itv : ground_items) {
@@ -355,14 +364,14 @@ void drawScene(const Room& room,
                 if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, ClipKind::Move);
                 if (fr) {
                     const Rectangle src = fr->rect();
-                    Rectangle dst{mouse.x - (src.width * cfg.map_scale * 0.5f),
-                                  mouse.y - (src.height * cfg.map_scale * 0.75f),
+                    Rectangle dst{mouse_local.x - (src.width * cfg.map_scale * 0.5f),
+                                  mouse_local.y - (src.height * cfg.map_scale * 0.75f),
                                   src.width * cfg.map_scale,
                                   src.height * cfg.map_scale};
                     DrawTexturePro(drag_item->tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, 0.85f));
                 }
             } else {
-                DrawCircleV(mouse, 8.0f, Fade(GOLD, 0.8f));
+                DrawCircleV(mouse_local, 8.0f, Fade(GOLD, 0.8f));
             }
         }
     }
@@ -385,11 +394,13 @@ void drawScene(const Room& room,
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - 14.0f, 13, RAYWHITE);
     }
 
+    rlPopMatrix();
+
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-        if (mouse.x < (cfg.inventory_visible ? inv_panel_x : static_cast<float>(GetScreenWidth()))) {
+        if (mouse_in_map) {
             int target = -1;
             for (auto it = monster_click_boxes.rbegin(); it != monster_click_boxes.rend(); ++it) {
-                if (CheckCollisionPointRec(mouse, it->second)) {
+                if (CheckCollisionPointRec(mouse_local, it->second)) {
                     target = it->first;
                     break;
                 }
@@ -398,28 +409,6 @@ void drawScene(const Room& room,
         }
     }
 
-    const float bar_x = 10.0f;
-    const float bar_y = 10.0f;
-    const float bar_w = 220.0f;
-    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y), static_cast<int>(bar_w), 16, Color{35, 20, 20, 210});
-    drawHealthBar(bar_x, bar_y + 5.0f, bar_w, game_state.your_hp, game_state.your_max_hp);
-    drawUiText(ui_font, TextFormat("HP %d/%d", game_state.your_hp, game_state.your_max_hp), bar_x + 6.0f, bar_y + 1.0f, 11, RAYWHITE);
-    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y + 20.0f), static_cast<int>(bar_w), 16, Color{18, 24, 46, 220});
-    DrawRectangle(static_cast<int>(bar_x + 1.0f), static_cast<int>(bar_y + 21.0f),
-                  static_cast<int>((bar_w - 2.0f) * (game_state.your_max_mana > 0 ? (static_cast<float>(game_state.your_mana) / game_state.your_max_mana) : 0.0f)),
-                  14, Color{74, 128, 220, 255});
-    drawUiText(ui_font, TextFormat("MP %d/%d", game_state.your_mana, game_state.your_max_mana), bar_x + 6.0f, bar_y + 21.0f, 11, RAYWHITE);
-    drawUiText(ui_font,
-               TextFormat("%s  %s  (%d,%d)  Exp:%d",
-                          game_state.your_user.c_str(),
-                          game_state.your_room.c_str(),
-                          game_state.your_x,
-                          game_state.your_y,
-                          game_state.your_exp),
-               bar_x + bar_w + 12.0f,
-               bar_y + 7.0f,
-               13,
-               RAYWHITE);
 }
 
 } // namespace client

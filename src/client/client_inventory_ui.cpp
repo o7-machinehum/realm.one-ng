@@ -5,16 +5,6 @@
 namespace client {
 
 namespace {
-
-Rectangle inventoryPanelRect(const InventoryUiConfig& cfg) {
-    return Rectangle{
-        static_cast<float>(GetScreenWidth()) - cfg.panel_w,
-        0.0f,
-        cfg.panel_w,
-        static_cast<float>(GetScreenHeight() - cfg.bottom_panel_height)
-    };
-}
-
 bool isEquipType(const std::string& t) {
     return t == "Weapon" || t == "Armor" || t == "Shield" ||
            t == "Legs" || t == "Boots" || t == "Helmet";
@@ -26,6 +16,7 @@ void drawInventoryUi(Font ui_font,
                      const GameStateMsg& game_state,
                      InventoryUiState& state,
                      const InventoryUiConfig& cfg,
+                     const Rectangle& panel_rect,
                      const std::function<bool(const std::string&, const Rectangle&)>& draw_item_icon,
                      const std::function<std::string(const std::string&)>& resolve_item_equip_type,
                      InventoryUiOutput& out) {
@@ -33,19 +24,11 @@ void drawInventoryUi(Font ui_font,
     out.drop_msg.reset();
     out.set_equipment_msg.reset();
 
-    Rectangle inv_panel = inventoryPanelRect(cfg);
-    Rectangle title_bar{inv_panel.x, inv_panel.y, inv_panel.width, 32.0f};
-
-    DrawRectangleRec(inv_panel, Color{26, 30, 34, 235});
-    DrawRectangleRec(title_bar, Color{42, 51, 60, 255});
-    DrawRectangleLinesEx(inv_panel, 1.0f, Color{98, 111, 126, 255});
-    drawUiText(ui_font, "Inventory", inv_panel.x + 10.0f, inv_panel.y + 7.0f, 16, RAYWHITE);
-
-    const int inv_count = static_cast<int>(game_state.inventory.size());
-    const int max_slots = std::max(24, inv_count + 6);
-
-    const float inv_start_x = inv_panel.x + 12.0f;
-    const float inv_start_y = inv_panel.y + 42.0f;
+    constexpr int max_slots = 8;
+    const int inv_count = std::min(static_cast<int>(game_state.inventory.size()), max_slots);
+    const float grid_w = cfg.cols * cfg.slot_size + (cfg.cols - 1) * cfg.gap;
+    const float inv_start_x = panel_rect.x + std::max(6.0f, (panel_rect.width - grid_w) * 0.5f);
+    const float inv_start_y = panel_rect.y + 12.0f;
 
     auto findInventorySlotAt = [&](const Vector2& p) -> int {
         for (int i = 0; i < max_slots; ++i) {
@@ -96,7 +79,8 @@ void drawInventoryUi(Font ui_font,
         const int to_slot = findInventorySlotAt(m);
         if (to_slot >= 0 && to_slot < inv_count && to_slot != state.drag.from_index) {
             out.swap_msg = InventorySwapMsg{state.drag.from_index, to_slot};
-        } else if (m.x < inv_panel.x) {
+        } else if (m.x < panel_rect.x || m.x > panel_rect.x + panel_rect.width ||
+                   m.y < panel_rect.y || m.y > panel_rect.y + panel_rect.height) {
             out.drop_msg = DropMsg{state.drag.from_index};
         }
         state.drag = DragState{};
