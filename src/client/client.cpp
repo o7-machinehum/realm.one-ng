@@ -36,6 +36,7 @@ constexpr float kInputOverlayMargin = 8.0f;
 constexpr float kInputTextOffsetX = 8.0f;
 constexpr float kInputTextOffsetY = 5.0f;
 
+// Draws a compact labeled progress bar used by vitals/skills windows.
 void drawLabeledBar(Font font,
                     const std::string& label,
                     float x,
@@ -59,6 +60,7 @@ void drawLabeledBar(Font font,
 }
 } // namespace
 
+// Owns the client runtime: input, networking mailbox pump, and frame rendering.
 int main(int argc, char** argv) {
     InitWindow(kInitialWindowW, kInitialWindowH, "The Island");
     SetTargetFPS(60);

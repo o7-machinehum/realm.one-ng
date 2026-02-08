@@ -18,6 +18,7 @@ struct PlayLayout {
     float map_origin_y = 0.0f;
 };
 
+// Computes play viewport, map origin, and scale for current screen/room.
 PlayLayout computePlayLayout(const std::optional<Room>& current_room,
                              int side_w,
                              int bottom_h,
@@ -25,6 +26,7 @@ PlayLayout computePlayLayout(const std::optional<Room>& current_room,
                              float max_height_ratio,
                              float fallback_scale);
 
+// Re-stacks right-docked windows into a contiguous top-to-bottom column.
 void snapDockedWindows(const std::vector<UiWindow*>& windows,
                        float right_x,
                        float top_margin,

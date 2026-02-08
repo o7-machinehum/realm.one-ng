@@ -11,6 +11,7 @@ namespace {
 
 constexpr const char* kCorpsePrefix = "corpse:";
 
+// Trims surrounding whitespace from parser tokens.
 std::string trim(std::string s) {
     auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
     while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
@@ -18,6 +19,7 @@ std::string trim(std::string s) {
     return s;
 }
 
+// Reads a TOML string literal or returns the raw token for bare values.
 std::string parseTomlString(const std::string& raw) {
     std::string v = trim(raw);
     if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
@@ -26,6 +28,7 @@ std::string parseTomlString(const std::string& raw) {
     return v;
 }
 
+// Reloads a sheet only when sprite-size overrides changed for that key.
 bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
                             const std::string& key,
                             const std::pair<int, int>& size,
@@ -57,6 +60,7 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
 
 } // namespace
 
+// Normalizes ids from file/user data so lookups are case/space insensitive.
 std::string normalizeKey(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -64,6 +68,7 @@ std::string normalizeKey(std::string s) {
     return trim(std::move(s));
 }
 
+// Extracts monster id from corpse inventory entries like "corpse:rat".
 std::string parseCorpseMonsterId(const std::string& raw) {
     const std::string n = normalizeKey(raw);
     const std::string prefix = kCorpsePrefix;
@@ -71,6 +76,7 @@ std::string parseCorpseMonsterId(const std::string& raw) {
     return n.substr(prefix.size());
 }
 
+// Loads lightweight item UI metadata from item TOML definitions.
 std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
     std::vector<ItemUiDef> out;
     namespace fs = std::filesystem;
@@ -110,6 +116,7 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
     return out;
 }
 
+// Ensures all visible monster sheets are loaded with current runtime sizes.
 void updateMonsterSheetCache(const GameStateMsg& game_state,
                              std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
     for (const auto& m : game_state.monsters) {
@@ -121,6 +128,7 @@ void updateMonsterSheetCache(const GameStateMsg& game_state,
     }
 }
 
+// Ensures all visible ground-item sheets are loaded with current runtime sizes.
 void updateItemSheetCacheFromGroundItems(const GameStateMsg& game_state,
                                          std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
     for (const auto& i : game_state.items) {
@@ -132,6 +140,7 @@ void updateItemSheetCacheFromGroundItems(const GameStateMsg& game_state,
     }
 }
 
+// Preloads sheets needed to draw inventory entries, including monster corpses.
 void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
                                        const std::unordered_map<std::string, ItemUiDef>& item_defs_by_key,
                                        const std::unordered_map<std::string, MonsterDef>& monster_defs_by_id,
@@ -164,6 +173,7 @@ void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
     }
 }
 
+// Releases textures owned by a cache map before shutdown.
 void unloadSheetCache(std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
     for (auto& [_, entry] : cache) {
         if (entry.tex.id != 0) UnloadTexture(entry.tex);

@@ -5,6 +5,7 @@
 
 namespace client {
 
+// Computes the playable viewport and map-fit transform for the current room.
 PlayLayout computePlayLayout(const std::optional<Room>& current_room,
                              int side_w,
                              int bottom_h,
@@ -67,6 +68,7 @@ PlayLayout computePlayLayout(const std::optional<Room>& current_room,
     return out;
 }
 
+// Keeps docked windows stacked vertically while preserving user order by y.
 void snapDockedWindows(const std::vector<UiWindow*>& windows,
                        float right_x,
                        float top_margin,
