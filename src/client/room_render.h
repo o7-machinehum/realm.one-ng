@@ -25,6 +25,8 @@ public:
     void unload();
 
     void draw(const Room& room, float scale, Vector2 origin = {0,0}) const;
+    void drawUnderEntities(const Room& room, float scale, Vector2 origin = {0,0}) const;
+    void drawAboveEntities(const Room& room, float scale, Vector2 origin = {0,0}) const;
 
 private:
     struct RuntimeTileset {
@@ -40,4 +42,5 @@ private:
 
     static bool load_tsx_info(const std::filesystem::path& tsx_path, TsxInfo& out);
     const RuntimeTileset* find_tileset(uint32_t gid) const;
+    void drawLayer(const Room& room, const RoomLayer& layer, float scale, Vector2 origin) const;
 };

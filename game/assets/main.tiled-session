@@ -35,11 +35,11 @@
             }
         },
         "/home/machinehum/the_island/data/rooms/d1.tmx": {
-            "scale": 2,
-            "selectedLayer": 6,
+            "scale": 3,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 193.25,
-                "y": 143.5
+                "x": 250.16666666666666,
+                "y": 157.33333333333334
             }
         },
         "/home/machinehum/the_island/data/rooms/d2.tmx": {
@@ -47,7 +47,7 @@
                 11
             ],
             "scale": 4,
-            "selectedLayer": 7,
+            "selectedLayer": 1,
             "viewCenter": {
                 "x": 242.125,
                 "y": 170.5
@@ -99,7 +99,7 @@
         "art/properties.tsx"
     ],
     "project": "main.tiled-project",
-    "property.type": "string",
+    "property.type": "bool",
     "recentFiles": [
         "/home/machinehum/the_island/data/rooms/n1_1.tmx",
         "art/character.tsx",

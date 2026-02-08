@@ -2,8 +2,38 @@
 #include <tinyxml2.h>
 
 #include <algorithm>
+#include <cctype>
 
 using namespace tinyxml2;
+
+namespace {
+std::string normalizedLayerName(const std::string& in) {
+    size_t b = 0;
+    size_t e = in.size();
+    while (b < e && std::isspace(static_cast<unsigned char>(in[b])) != 0) ++b;
+    while (e > b && std::isspace(static_cast<unsigned char>(in[e - 1])) != 0) --e;
+    std::string out = in.substr(b, e - b);
+    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return out;
+}
+
+bool isMetadataLayerName(const std::string& name) {
+    const std::string n = normalizedLayerName(name);
+    return n == "monsters" || n == "items" || n == "block";
+}
+
+bool isUnderEntityLayerName(const std::string& name) {
+    const std::string n = normalizedLayerName(name);
+    return n == "floor" || n == "l1" || n == "l2";
+}
+
+bool isAboveEntityLayerName(const std::string& name) {
+    const std::string n = normalizedLayerName(name);
+    return n == "l3" || n == "l4";
+}
+} // namespace
 
 RoomRenderer::~RoomRenderer() { unload(); }
 
@@ -81,37 +111,54 @@ const RoomRenderer::RuntimeTileset* RoomRenderer::find_tileset(uint32_t gid) con
     return best;
 }
 
-void RoomRenderer::draw(const Room& room, float scale, Vector2 origin) const {
-    if (sets_.empty()) return;
+void RoomRenderer::drawLayer(const Room& room, const RoomLayer& layer, float scale, Vector2 origin) const {
+    for (int y = 0; y < layer.height; y++) {
+        for (int x = 0; x < layer.width; x++) {
+            uint32_t gid = layer.gids[y * layer.width + x];
+            if (gid == 0) continue;
 
-    for (const auto& layer : room.layers()) {
-        if (layer.name == "Monsters" || layer.name == "Items") continue; // metadata layers
-        for (int y = 0; y < layer.height; y++) {
-            for (int x = 0; x < layer.width; x++) {
-                uint32_t gid = layer.gids[y * layer.width + x];
-                if (gid == 0) continue;
+            // NOTE: flip flags ignored for now
+            const RuntimeTileset* ts = find_tileset(gid);
+            if (!ts) continue;
+            if (!ts->drawable) continue;
 
-                // NOTE: flip flags ignored for now
-                const RuntimeTileset* ts = find_tileset(gid);
-                if (!ts) continue;
-                if (!ts->drawable) continue;
+            int localId = (int)gid - ts->first_gid;
+            if (localId < 0) continue;
 
-                int localId = (int)gid - ts->first_gid;
-                if (localId < 0) continue;
+            int sx = (localId % ts->columns) * ts->tileW;
+            int sy = (localId / ts->columns) * ts->tileH;
 
-                int sx = (localId % ts->columns) * ts->tileW;
-                int sy = (localId / ts->columns) * ts->tileH;
+            Rectangle src{ (float)sx, (float)sy, (float)ts->tileW, (float)ts->tileH };
+            Rectangle dst{
+                origin.x + (float)x * room.tile_width() * scale,
+                origin.y + (float)y * room.tile_height() * scale,
+                (float)room.tile_width() * scale,
+                (float)room.tile_height() * scale
+            };
 
-                Rectangle src{ (float)sx, (float)sy, (float)ts->tileW, (float)ts->tileH };
-                Rectangle dst{
-                    origin.x + (float)x * room.tile_width() * scale,
-                    origin.y + (float)y * room.tile_height() * scale,
-                    (float)room.tile_width() * scale,
-                    (float)room.tile_height() * scale
-                };
-
-                DrawTexturePro(ts->tex, src, dst, Vector2{0,0}, 0.0f, WHITE);
-            }
+            DrawTexturePro(ts->tex, src, dst, Vector2{0,0}, 0.0f, WHITE);
         }
     }
+}
+
+void RoomRenderer::drawUnderEntities(const Room& room, float scale, Vector2 origin) const {
+    if (sets_.empty()) return;
+    for (const auto& layer : room.layers()) {
+        if (isMetadataLayerName(layer.name)) continue;
+        if (!isUnderEntityLayerName(layer.name)) continue;
+        drawLayer(room, layer, scale, origin);
+    }
+}
+
+void RoomRenderer::drawAboveEntities(const Room& room, float scale, Vector2 origin) const {
+    if (sets_.empty()) return;
+    for (const auto& layer : room.layers()) {
+        if (!isAboveEntityLayerName(layer.name)) continue;
+        drawLayer(room, layer, scale, origin);
+    }
+}
+
+void RoomRenderer::draw(const Room& room, float scale, Vector2 origin) const {
+    drawUnderEntities(room, scale, origin);
+    drawAboveEntities(room, scale, origin);
 }

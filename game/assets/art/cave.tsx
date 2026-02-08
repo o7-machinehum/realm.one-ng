@@ -1,6 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <tileset version="1.10" tiledversion="1.11.2" name="cave" tilewidth="16" tileheight="16" tilecount="1000" columns="40">
  <image source="cave.png" width="640" height="400"/>
+ <tile id="86">
+  <properties>
+   <property name="non_walkable" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="87">
+  <properties>
+   <property name="non_walkable" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="88">
+  <properties>
+   <property name="non_walkable" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="89">
+  <properties>
+   <property name="non_walkable" type="bool" value="true"/>
+  </properties>
+ </tile>
  <tile id="207">
   <properties>
    <property name="non_walkable" type="bool" value="true"/>

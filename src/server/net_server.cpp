@@ -305,7 +305,9 @@ void NetServer::recvLoop() {
 
     auto isItemReachableByPlayer = [&](const PlayerRuntime& p, const GroundItemRuntime& item) -> bool {
         if (item.room != p.data.room) return false;
-        return tileDistance(p.data.x, p.data.y, item.x, item.y) <= 1;
+        const int dx = std::abs(p.data.x - item.x);
+        const int dy = std::abs(p.data.y - item.y);
+        return std::max(dx, dy) <= 1;
     };
 
     auto findGroundItemIndexById = [&](const PlayerRuntime& p, int item_id) -> int {

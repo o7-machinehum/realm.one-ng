@@ -61,6 +61,7 @@ int main(int argc, char** argv) {
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
+    std::string last_game_state_room;
     std::deque<std::string> logs;
     std::string input;
     std::string last_event;
@@ -166,7 +167,15 @@ int main(int argc, char** argv) {
         }
 
         if (auto state = mailbox.pop<GameStateMsg>(MsgType::GameState)) {
+            const bool room_changed = !last_game_state_room.empty() && state->your_room != last_game_state_room;
             game_state = std::move(*state);
+            if (room_changed) {
+                scene_state.prev_pos_by_key.clear();
+                scene_state.render_pos_by_key.clear();
+                scene_state.anim_by_key.clear();
+                scene_state.dragging_ground_item_id = -1;
+            }
+            last_game_state_room = game_state->your_room;
             for (const auto& m : game_state->monsters) {
                 if (m.sprite_tileset.empty()) continue;
                 auto& entry = monster_sheet_cache[m.sprite_tileset];
@@ -231,12 +240,32 @@ int main(int argc, char** argv) {
         BeginDrawing();
         ClearBackground(BLACK);
 
+        const int play_w = std::max(1, GetScreenWidth() - static_cast<int>(inventory_cfg.panel_w));
+        const int play_h = std::max(1, GetScreenHeight() - inventory_cfg.bottom_panel_height);
+        const Rectangle play_rect{0.0f, 0.0f, static_cast<float>(play_w), static_cast<float>(play_h)};
+        DrawRectangleRec(play_rect, BLACK);
+        float render_scale = scene_cfg.map_scale;
         if (current_room) {
-            rr.draw(*current_room, scene_cfg.map_scale);
+            const float map_px_w = static_cast<float>(current_room->map_width() * current_room->tile_width());
+            const float map_px_h = static_cast<float>(current_room->map_height() * current_room->tile_height());
+            if (map_px_w > 0.0f && map_px_h > 0.0f) {
+                const float fit_scale = std::min(static_cast<float>(play_w) / map_px_w,
+                                                 static_cast<float>(play_h) / map_px_h);
+                render_scale = std::max(0.5f, fit_scale);
+            }
+        }
+
+        BeginScissorMode(0, 0, play_w, play_h);
+        if (current_room) {
+            rr.drawUnderEntities(*current_room, render_scale);
         }
 
         if (current_room && game_state) {
             client::SceneOutput scene_out{};
+            client::SceneConfig draw_cfg = scene_cfg;
+            draw_cfg.map_scale = render_scale;
+            draw_cfg.inventory_panel_width = inventory_cfg.panel_w;
+            draw_cfg.bottom_panel_height = static_cast<float>(inventory_cfg.bottom_panel_height);
             const auto monster_sheet_view = [&](const std::string& tsx) -> client::SpriteSheetView {
                 auto it = monster_sheet_cache.find(tsx);
                 if (it == monster_sheet_cache.end()) return {};
@@ -265,7 +294,7 @@ int main(int argc, char** argv) {
                               ui_font,
                               GetFrameTime(),
                               scene_state,
-                              scene_cfg,
+                              draw_cfg,
                               scene_out);
             if (scene_out.attack_click.has_value()) {
                 mailbox.push(MsgType::Attack, *scene_out.attack_click);
@@ -283,6 +312,10 @@ int main(int argc, char** argv) {
                 mailbox.push(MsgType::Drop, *inv_out.drop_msg);
             }
         }
+        if (current_room) {
+            rr.drawAboveEntities(*current_room, render_scale);
+        }
+        EndScissorMode();
 
         DrawRectangle(0, GetScreenHeight() - inventory_cfg.bottom_panel_height, GetScreenWidth(), inventory_cfg.bottom_panel_height, Fade(BLACK, 0.88f));
         DrawRectangleLines(0, GetScreenHeight() - inventory_cfg.bottom_panel_height, GetScreenWidth(), inventory_cfg.bottom_panel_height, GRAY);
