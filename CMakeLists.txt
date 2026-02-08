@@ -15,14 +15,14 @@ pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
 # Shared code
 add_library(qg_common
-  src/commmon/sprites.cpp
-  src/commmon/room.cpp
-  src/commmon/entity.cpp
+  src/common/sprites.cpp
+  src/common/room.cpp
+  src/common/entity.cpp
   src/client/room_render.cpp
 )
 
 target_include_directories(qg_common PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 
 target_link_libraries(qg_common PUBLIC
@@ -47,7 +47,7 @@ target_link_libraries(client PRIVATE
 target_include_directories(client PRIVATE
     ${ENET_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 
 # ----- Server
@@ -56,6 +56,7 @@ add_executable(server
     src/server/net_server.cpp
     src/server/world.cpp
     src/server/monster_defs.cpp
+    src/server/item_defs.cpp
     src/server/auth_db.cpp
 )
 
@@ -70,7 +71,7 @@ target_include_directories(server PRIVATE
     ${ENET_INCLUDE_DIRS}
     ${SQLITE3_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 
 # ----- Tests
@@ -101,7 +102,7 @@ target_link_libraries(client_server_ser_de PRIVATE
 )
 target_include_directories(client_server_ser_de PRIVATE
     ${ENET_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
     ${CMAKE_CURRENT_SOURCE_DIR}/src/server
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )

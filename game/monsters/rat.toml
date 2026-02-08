@@ -13,6 +13,10 @@ strength = 6
 speed_ms = 500
 exp_reward = 10
 
+[[drops]]
+item = "wooden_sword"
+chance = 0.20
+
 # Extra fields (currently ignored by code, safe to edit/add):
 # defense = 2
 # agility = 4

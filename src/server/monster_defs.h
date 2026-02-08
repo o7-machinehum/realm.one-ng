@@ -3,6 +3,11 @@
 #include <string>
 #include <vector>
 
+struct MonsterDropDef {
+    std::string item_id;
+    float chance = 0.0f; // 0.0 .. 1.0
+};
+
 struct MonsterDef {
     std::string id;            // Derived from filename stem.
     std::string name;          // Display name.
@@ -14,6 +19,7 @@ struct MonsterDef {
     int strength = 6;
     int speed_ms = 500;
     int exp_reward = 10;
+    std::vector<MonsterDropDef> drops;
 };
 
 std::vector<MonsterDef> loadMonsterDefs(const std::string& dir_path);

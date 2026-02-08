@@ -1,6 +1,7 @@
 #include "net_server.h"
 
 #include "auth_db.h"
+#include "item_defs.h"
 #include "monster_defs.h"
 #include "world.h"
 
@@ -30,11 +31,15 @@ struct MonsterRuntime {
     int speed_ms = 500;
     int move_accum_ms = 0;
     int exp_reward = 10;
+    std::vector<MonsterDropDef> drops;
 };
 
 struct GroundItemRuntime {
     int id = 0;
+    std::string item_id;
     std::string name;
+    std::string sprite_tileset;
+    std::string sprite_name;
     std::string room;
     int x = 0;
     int y = 0;
@@ -124,7 +129,7 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
 
     for (const auto& i : items) {
         if (i.room != self.data.room) continue;
-        gs.items.push_back(GroundItemStateMsg{i.id, i.name, i.room, i.x, i.y});
+        gs.items.push_back(GroundItemStateMsg{i.id, i.name, i.sprite_tileset, i.sprite_name, i.room, i.x, i.y});
     }
 
     return gs;
@@ -159,6 +164,39 @@ void NetServer::recvLoop() {
     if (defs_by_id.empty()) {
         std::cerr << "[server] warning: no monster defs found in game/monsters\n";
     }
+    auto item_defs = loadItemDefs("game/items");
+    std::unordered_map<std::string, const ItemDef*> item_defs_by_id;
+    for (const auto& d : item_defs) {
+        item_defs_by_id[normalizeId(d.id)] = &d;
+        item_defs_by_id[normalizeId(d.name)] = &d;
+    }
+    if (item_defs_by_id.empty()) {
+        std::cerr << "[server] warning: no item defs found in game/items\n";
+    }
+
+    auto spawnItemById = [&](const std::string& raw_item_id,
+                             const std::string& room_name,
+                             int x,
+                             int y) {
+        const std::string item_id = normalizeId(raw_item_id);
+        auto dit = item_defs_by_id.find(item_id);
+        if (dit == item_defs_by_id.end()) {
+            std::cerr << "[server] unknown item id '" << raw_item_id
+                      << "' in room " << room_name << "\n";
+            return;
+        }
+        const ItemDef& def = *dit->second;
+        items.push_back(GroundItemRuntime{
+            next_item_id++,
+            def.id,
+            def.name,
+            def.sprite_tileset,
+            def.sprite_name,
+            room_name,
+            x,
+            y
+        });
+    };
 
     for (const auto& room_name : world_.roomNames()) {
         const Room* room = world_.getRoom(room_name);
@@ -205,11 +243,19 @@ void NetServer::recvLoop() {
                 def.max_hp,
                 std::max(1, def.speed_ms),
                 0,
-                def.exp_reward
+                def.exp_reward,
+                def.drops
             });
         }
-        items.push_back(GroundItemRuntime{next_item_id++, "health_potion", room_name, 3, 3});
-        items.push_back(GroundItemRuntime{next_item_id++, "gold_coin", room_name, 6, 4});
+        for (const auto& spawn : room->item_spawns()) {
+            if (!room->isWalkable(spawn.x, spawn.y)) {
+                std::cerr << "[server] item spawn '" << spawn.item_id
+                          << "' overlaps blocked tile in room "
+                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                continue;
+            }
+            spawnItemById(spawn.item_id, room_name, spawn.x, spawn.y);
+        }
     }
 
     auto sendRoom = [&](ENetPeer* peer, const std::string& room_name) {
@@ -253,6 +299,45 @@ void NetServer::recvLoop() {
         return false;
     };
 
+    auto tileDistance = [](int ax, int ay, int bx, int by) -> int {
+        return std::abs(ax - bx) + std::abs(ay - by);
+    };
+
+    auto isItemReachableByPlayer = [&](const PlayerRuntime& p, const GroundItemRuntime& item) -> bool {
+        if (item.room != p.data.room) return false;
+        return tileDistance(p.data.x, p.data.y, item.x, item.y) <= 1;
+    };
+
+    auto findGroundItemIndexById = [&](const PlayerRuntime& p, int item_id) -> int {
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (items[i].id != item_id) continue;
+            if (items[i].room != p.data.room) continue;
+            return static_cast<int>(i);
+        }
+        return -1;
+    };
+
+    auto findPickupCandidateIndex = [&](const PlayerRuntime& p, int requested_item_id) -> int {
+        if (requested_item_id != -1) {
+            const int idx = findGroundItemIndexById(p, requested_item_id);
+            if (idx < 0) return -1;
+            return isItemReachableByPlayer(p, items[(size_t)idx]) ? idx : -1;
+        }
+
+        int best_idx = -1;
+        int best_dist = 999999;
+        for (size_t i = 0; i < items.size(); ++i) {
+            const auto& item = items[i];
+            if (!isItemReachableByPlayer(p, item)) continue;
+            const int dist = tileDistance(p.data.x, p.data.y, item.x, item.y);
+            if (dist < best_dist) {
+                best_dist = dist;
+                best_idx = static_cast<int>(i);
+            }
+        }
+        return best_idx;
+    };
+
     auto canMonsterStand = [&](const MonsterRuntime& mon,
                                int nx,
                                int ny,
@@ -271,6 +356,12 @@ void NetServer::recvLoop() {
             if (other.x == nx && other.y == ny) return false;
         }
         return true;
+    };
+
+    auto rollChance = [](float p) -> bool {
+        const float clamped = std::max(0.0f, std::min(1.0f, p));
+        const float r = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+        return r <= clamped;
     };
 
     const auto tick_dt = std::chrono::milliseconds(500);
@@ -429,15 +520,7 @@ void NetServer::recvLoop() {
                             if (!player.authenticated) break;
                             PickupMsg m = fromBytes<PickupMsg>(env.payload.data(), env.payload.size());
 
-                            int idx = -1;
-                            for (size_t i = 0; i < items.size(); ++i) {
-                                const auto& item = items[i];
-                                if (item.room != player.data.room) continue;
-                                if (item.x != player.data.x || item.y != player.data.y) continue;
-                                if (m.item_id != -1 && item.id != m.item_id) continue;
-                                idx = static_cast<int>(i);
-                                break;
-                            }
+                            const int idx = findPickupCandidateIndex(player, m.item_id);
 
                             std::string event = player.data.username + " found no item";
                             if (idx >= 0) {
@@ -459,10 +542,21 @@ void NetServer::recvLoop() {
                                 m.inventory_index < static_cast<int>(player.data.inventory.size())) {
                                 const std::string item_name = player.data.inventory[m.inventory_index];
                                 player.data.inventory.erase(player.data.inventory.begin() + m.inventory_index);
-
+                                std::string item_id = normalizeId(item_name);
+                                std::string sprite_tileset = "materials2.tsx";
+                                std::string sprite_name = item_id;
+                                auto def_it = item_defs_by_id.find(item_id);
+                                if (def_it != item_defs_by_id.end()) {
+                                    item_id = def_it->second->id;
+                                    sprite_tileset = def_it->second->sprite_tileset;
+                                    sprite_name = def_it->second->sprite_name;
+                                }
                                 items.push_back(GroundItemRuntime{
                                     next_item_id++,
+                                    item_id,
                                     item_name,
+                                    sprite_tileset,
+                                    sprite_name,
                                     player.data.room,
                                     player.data.x,
                                     player.data.y
@@ -486,6 +580,33 @@ void NetServer::recvLoop() {
                                 savePlayerNow(player);
                                 broadcastState(player.data.username + " rearranged inventory");
                             }
+                        } break;
+
+                        case MsgType::MoveGroundItem: {
+                            if (!player.authenticated) break;
+                            MoveGroundItemMsg m = fromBytes<MoveGroundItemMsg>(env.payload.data(), env.payload.size());
+                            const Room* room = world_.getRoom(player.data.room);
+                            if (!room) break;
+
+                            if (m.to_x < 0 || m.to_y < 0 || m.to_x >= room->map_width() || m.to_y >= room->map_height()) {
+                                break;
+                            }
+                            if (!room->isWalkable(m.to_x, m.to_y)) break;
+                            if (occupiedByMonster(player.data.room, m.to_x, m.to_y) ||
+                                occupiedByPlayer(ev.peer, player.data.room, m.to_x, m.to_y)) {
+                                break;
+                            }
+
+                            const int idx = findGroundItemIndexById(player, m.item_id);
+                            if (idx < 0) break;
+                            if (!isItemReachableByPlayer(player, items[(size_t)idx])) break;
+
+                            const int throw_dist = tileDistance(m.to_x, m.to_y, player.data.x, player.data.y);
+                            if (throw_dist > 5) break;
+
+                            items[idx].x = m.to_x;
+                            items[idx].y = m.to_y;
+                            broadcastState(player.data.username + " moved " + items[idx].name);
                         } break;
 
                         case MsgType::Chat: {
@@ -564,7 +685,11 @@ void NetServer::recvLoop() {
                 if (mon.hp <= 0) {
                     p.data.exp += mon.exp_reward;
                     p.attack_target_monster_id = -1;
-                    items.push_back(GroundItemRuntime{next_item_id++, "monster_loot", mon.room, mon.x, mon.y});
+                    for (const auto& drop : mon.drops) {
+                        if (drop.item_id.empty()) continue;
+                        if (!rollChance(drop.chance)) continue;
+                        spawnItemById(drop.item_id, mon.room, mon.x, mon.y);
+                    }
                     tick_event = p.data.username + " killed " + mon.name + " (exp +" + std::to_string(mon.exp_reward) + ")";
                     monsters.erase(monsters.begin() + hit_index);
                     savePlayerNow(p);

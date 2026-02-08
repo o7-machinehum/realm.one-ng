@@ -67,6 +67,7 @@ int main(int argc, char** argv) {
     client::SceneState scene_state;
     client::InventoryUiState inventory_ui_state;
     std::unordered_map<std::string, SpriteSheetCacheEntry> monster_sheet_cache;
+    std::unordered_map<std::string, SpriteSheetCacheEntry> item_sheet_cache;
     float move_repeat_timer = 0.0f;
     bool move_repeat_started = false;
 
@@ -161,6 +162,7 @@ int main(int argc, char** argv) {
             scene_state.prev_pos_by_key.clear();
             scene_state.render_pos_by_key.clear();
             scene_state.anim_by_key.clear();
+            scene_state.dragging_ground_item_id = -1;
         }
 
         if (auto state = mailbox.pop<GameStateMsg>(MsgType::GameState)) {
@@ -194,6 +196,32 @@ int main(int argc, char** argv) {
                     entry.ready = false;
                 }
             }
+            for (const auto& i : game_state->items) {
+                if (i.sprite_tileset.empty() || i.sprite_name.empty()) continue;
+                auto& entry = item_sheet_cache[i.sprite_tileset];
+                const std::string size_key = toLower(i.sprite_name);
+                const std::pair<int, int> size_val{1, 1};
+                bool needs_reload = !entry.ready;
+                auto sit = entry.size_overrides.find(size_key);
+                if (sit == entry.size_overrides.end() || sit->second != size_val) {
+                    entry.size_overrides[size_key] = size_val;
+                    needs_reload = true;
+                }
+                if (!needs_reload) continue;
+
+                if (entry.tex.id != 0) {
+                    UnloadTexture(entry.tex);
+                    entry.tex = Texture2D{};
+                }
+                const std::string tsx_path = "game/assets/art/" + i.sprite_tileset;
+                if (entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
+                    const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
+                    entry.tex = LoadTexture(tex_path.c_str());
+                    entry.ready = (entry.tex.id != 0);
+                } else {
+                    entry.ready = false;
+                }
+            }
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
                 last_event = game_state->event_text;
                 client::pushBounded(logs, game_state->event_text);
@@ -218,12 +246,22 @@ int main(int argc, char** argv) {
                     it->second.ready
                 };
             };
+            const auto item_sheet_view = [&](const std::string& tsx) -> client::ItemSheetView {
+                auto it = item_sheet_cache.find(tsx);
+                if (it == item_sheet_cache.end()) return {};
+                return client::ItemSheetView{
+                    &it->second.sprites,
+                    it->second.tex,
+                    it->second.ready
+                };
+            };
             client::drawScene(*current_room,
                               *game_state,
                               sprites,
                               character_tex,
                               sprite_ready,
                               monster_sheet_view,
+                              item_sheet_view,
                               ui_font,
                               GetFrameTime(),
                               scene_state,
@@ -231,6 +269,9 @@ int main(int argc, char** argv) {
                               scene_out);
             if (scene_out.attack_click.has_value()) {
                 mailbox.push(MsgType::Attack, *scene_out.attack_click);
+            }
+            if (scene_out.move_ground_item.has_value()) {
+                mailbox.push(MsgType::MoveGroundItem, *scene_out.move_ground_item);
             }
 
             client::InventoryUiOutput inv_out{};
@@ -260,6 +301,9 @@ int main(int argc, char** argv) {
 
     nc.stop();
     for (auto& [_, entry] : monster_sheet_cache) {
+        if (entry.tex.id != 0) UnloadTexture(entry.tex);
+    }
+    for (auto& [_, entry] : item_sheet_cache) {
         if (entry.tex.id != 0) UnloadTexture(entry.tex);
     }
     if (owns_ui_font) UnloadFont(ui_font);

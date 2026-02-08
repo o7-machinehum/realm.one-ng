@@ -79,6 +79,11 @@ void NetClient::recvLoop() {
             sendWire(peer, 0, wire);
             enet_host_flush(client);
         }
+        if (auto mv = mailbox_.pop<MoveGroundItemMsg>(MsgType::MoveGroundItem)) {
+            auto wire = pack(MsgType::MoveGroundItem, *mv);
+            sendWire(peer, 0, wire);
+            enet_host_flush(client);
+        }
 
         ENetEvent ev{};
         if (enet_host_service(client, &ev, 100) > 0) {
@@ -92,6 +97,7 @@ void NetClient::recvLoop() {
                         case MsgType::Pickup:
                         case MsgType::Drop:
                         case MsgType::InventorySwap:
+                        case MsgType::MoveGroundItem:
                             // Client only expects server-originating state/response messages.
                             break;
                         case MsgType::Room: {

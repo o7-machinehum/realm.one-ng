@@ -5,6 +5,7 @@ Each monster template is one `.toml` file in this folder.
 - Unique monster id: filename stem (`rat.toml` -> `rat`)
 - Author-facing display name: `name`
 - Stats: `max_hp`, `strength`, `speed_ms`, `exp_reward`
+- Optional loot table: repeated `[[drops]]` entries with `item` + `chance`
 
 ## Sprite Connection
 
@@ -36,4 +37,5 @@ The server reads the `Monsters` layer and instantiates runtime monsters from the
 ## Notes
 
 - Parser currently uses a flat TOML subset (`key = value`, quoted strings, ints, `# comments`).
+- Supported table form: `[[drops]]` with `item` and `chance` (0.0..1.0).
 - Unknown keys are ignored safely.

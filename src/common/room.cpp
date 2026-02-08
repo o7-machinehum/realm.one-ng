@@ -158,6 +158,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     layers_.clear();
     portals_.clear();
     monster_spawns_.clear();
+    item_spawns_.clear();
     walkable_mask_.clear();
     props_.clear();
 
@@ -213,6 +214,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     // ---- tilesets (external TSX only, as your renderer expects) ----
     std::vector<std::map<int, bool>> ts_walk_props;
     std::vector<std::map<int, std::string>> ts_monster_props;
+    std::vector<std::map<int, std::string>> ts_item_props;
     for (XMLElement* ts = map->FirstChildElement("tileset");
          ts;
          ts = ts->NextSiblingElement("tileset")) {
@@ -235,6 +237,17 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
             mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster");
         }
         ts_monster_props.push_back(std::move(mon_props));
+        auto item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item_name");
+        if (item_props.empty()) {
+            item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item_id");
+        }
+        if (item_props.empty()) {
+            item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item");
+        }
+        if (item_props.empty()) {
+            item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "name");
+        }
+        ts_item_props.push_back(std::move(item_props));
     }
 
     // ---- layers (CSV only) ----
@@ -405,6 +418,25 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                 auto it = ts_monster_props[tsi].find(local);
                 if (it == ts_monster_props[tsi].end() || it->second.empty()) continue;
                 monster_spawns_.push_back(MonsterSpawn{it->second, "", x, y});
+            }
+        }
+        break;
+    }
+
+    // ---- item spawns from tile layer named Items ----
+    for (const auto& layer : layers_) {
+        if (layer.name != "Items") continue;
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (raw == 0) continue;
+                const uint32_t gid = raw & 0x1FFFFFFFu;
+                const int tsi = findTsIndexByGid(gid);
+                if (tsi < 0 || tsi >= static_cast<int>(ts_item_props.size())) continue;
+                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
+                auto it = ts_item_props[tsi].find(local);
+                if (it == ts_item_props[tsi].end() || it->second.empty()) continue;
+                item_spawns_.push_back(ItemSpawn{it->second, x, y});
             }
         }
         break;

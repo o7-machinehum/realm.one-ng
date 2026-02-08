@@ -39,6 +39,18 @@ bool parseInt(const std::string& raw, int& out) {
     }
 }
 
+bool parseFloat(const std::string& raw, float& out) {
+    try {
+        size_t pos = 0;
+        const float v = std::stof(raw, &pos);
+        if (pos != raw.size()) return false;
+        out = v;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 std::string parseStringValue(const std::string& raw) {
     std::string v = trim(raw);
     if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
@@ -64,13 +76,32 @@ bool parseTomlSubsetFile(const fs::path& p, MonsterDef& out) {
     std::ifstream in(p);
     if (!in) return false;
 
+    MonsterDropDef current_drop{};
+    bool in_drop_table = false;
+    bool current_drop_valid = false;
+    auto flush_drop = [&]() {
+        if (!in_drop_table || !current_drop_valid) return;
+        if (current_drop.item_id.empty()) return;
+        current_drop.chance = std::max(0.0f, std::min(1.0f, current_drop.chance));
+        out.drops.push_back(current_drop);
+    };
+
     std::string line;
     while (std::getline(in, line)) {
         line = trim(stripComment(line));
         if (line.empty()) continue;
 
+        if (line == "[[drops]]") {
+            flush_drop();
+            current_drop = MonsterDropDef{};
+            in_drop_table = true;
+            current_drop_valid = true;
+            continue;
+        }
         if (!line.empty() && line.front() == '[') {
-            // Ignore sections for now; this is intentionally flat.
+            flush_drop();
+            in_drop_table = false;
+            current_drop_valid = false;
             continue;
         }
 
@@ -80,6 +111,16 @@ bool parseTomlSubsetFile(const fs::path& p, MonsterDef& out) {
         const std::string key = trim(line.substr(0, eq));
         const std::string raw_val = trim(line.substr(eq + 1));
         if (key.empty() || raw_val.empty()) continue;
+
+        if (in_drop_table) {
+            if (key == "item" || key == "item_id") {
+                current_drop.item_id = parseStringValue(raw_val);
+            } else if (key == "chance" || key == "probability") {
+                float v = current_drop.chance;
+                if (parseFloat(raw_val, v)) current_drop.chance = v;
+            }
+            continue;
+        }
 
         if (key == "name") out.name = parseStringValue(raw_val);
         else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
@@ -98,6 +139,7 @@ bool parseTomlSubsetFile(const fs::path& p, MonsterDef& out) {
         else if (key == "exp_reward") { int v = out.exp_reward; if (parseInt(raw_val, v)) out.exp_reward = std::max(0, v); }
     }
 
+    flush_drop();
     return true;
 }
 

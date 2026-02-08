@@ -35,11 +35,11 @@
             }
         },
         "/home/machinehum/the_island/data/rooms/d1.tmx": {
-            "scale": 3,
-            "selectedLayer": 7,
+            "scale": 2,
+            "selectedLayer": 6,
             "viewCenter": {
-                "x": 235.16666666666666,
-                "y": 188.33333333333334
+                "x": 193.25,
+                "y": 143.5
             }
         },
         "/home/machinehum/the_island/data/rooms/d2.tmx": {
@@ -57,11 +57,11 @@
             "expandedObjectLayers": [
                 11
             ],
-            "scale": 5.5,
+            "scale": 2,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 248.63636363636365,
-                "y": 129.81818181818184
+                "x": 200.25,
+                "y": 156
             }
         },
         "art/cave.tsx": {
@@ -74,9 +74,12 @@
             "scaleInDock": 2,
             "scaleInEditor": 5.5
         },
+        "art/npc_test.tsx": {
+            "scaleInEditor": 8
+        },
         "art/properties.tsx": {
             "scaleInDock": 1,
-            "scaleInEditor": 1
+            "scaleInEditor": 5.5
         }
     },
     "last.externalTilesetPath": "/home/machinehum/projects/quick_game/game/assets/art",
@@ -96,12 +99,13 @@
         "art/properties.tsx"
     ],
     "project": "main.tiled-project",
-    "property.type": "bool",
+    "property.type": "string",
     "recentFiles": [
-        "art/character.tsx",
         "/home/machinehum/the_island/data/rooms/n1_1.tmx",
-        "art/cave.tsx",
+        "art/character.tsx",
+        "art/npc_test.tsx",
         "art/properties.tsx",
+        "art/cave.tsx",
         "/home/machinehum/the_island/data/rooms/d2.tmx",
         "/home/machinehum/the_island/data/rooms/d1.tmx",
         "/home/machinehum/projects/quick_game/data/rooms/d1.tmx",

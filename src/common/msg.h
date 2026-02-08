@@ -22,6 +22,7 @@ enum class MsgType : uint16_t {
     Pickup,
     Drop,
     InventorySwap,
+    MoveGroundItem,
     GameState
 };
 
@@ -103,6 +104,17 @@ struct InventorySwapMsg {
     }
 };
 
+struct MoveGroundItemMsg {
+    int item_id = -1;
+    int to_x = 0;
+    int to_y = 0;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(item_id, to_x, to_y);
+    }
+};
+
 struct PlayerStateMsg {
     std::string user;
     std::string room;
@@ -140,13 +152,15 @@ struct MonsterStateMsg {
 struct GroundItemStateMsg {
     int id = 0;
     std::string name;
+    std::string sprite_tileset;
+    std::string sprite_name;
     std::string room;
     int x = 0;
     int y = 0;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(id, name, room, x, y);
+        ar(id, name, sprite_tileset, sprite_name, room, x, y);
     }
 };
 
@@ -182,6 +196,7 @@ using Message = std::variant<
     PickupMsg,
     DropMsg,
     InventorySwapMsg,
+    MoveGroundItemMsg,
     GameStateMsg
 >;
 

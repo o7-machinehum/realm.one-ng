@@ -71,12 +71,14 @@ void drawScene(const Room& room,
                Texture2D character_tex,
                bool sprite_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
+               const std::function<ItemSheetView(const std::string&)>& item_sheet_view,
                Font ui_font,
                float dt,
                SceneState& scene_state,
                const SceneConfig& cfg,
                SceneOutput& out) {
     out.attack_click.reset();
+    out.move_ground_item.reset();
     scene_state.attack_fx_t += dt;
 
     const float tile_w = room.tile_width() * cfg.map_scale;
@@ -105,11 +107,27 @@ void drawScene(const Room& room,
     std::vector<PlayerVisual> player_visuals;
     std::vector<DrawCmd> draw_cmds;
 
+    struct GroundItemVisual {
+        const GroundItemStateMsg* msg = nullptr;
+        const Sprites* sprites = nullptr;
+        Texture2D tex{};
+        bool ready = false;
+        Rectangle tile_box{};
+    };
+    std::vector<GroundItemVisual> ground_items;
+    ground_items.reserve(game_state.items.size());
     for (const auto& item : game_state.items) {
-        const float x = item.x * tile_w + tile_w * 0.5f;
-        const float y = item.y * tile_h + tile_h * 0.5f;
-        DrawRectangle(static_cast<int>(x - 5), static_cast<int>(y - 5), 10, 10, GOLD);
-        drawUiText(ui_font, TextFormat("%d", item.id), x + 8, y - 8, 13, YELLOW);
+        ItemSheetView sheet_view{};
+        if (item_sheet_view) sheet_view = item_sheet_view(item.sprite_tileset);
+        const Sprites* item_sprites = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : nullptr;
+        const Texture2D item_tex = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : Texture2D{};
+        ground_items.push_back(GroundItemVisual{
+            &item,
+            item_sprites,
+            item_tex,
+            (item_sprites != nullptr && item_tex.id != 0),
+            Rectangle{item.x * tile_w, item.y * tile_h, tile_w, tile_h}
+        });
     }
 
     for (const auto& m : game_state.monsters) {
@@ -175,6 +193,60 @@ void drawScene(const Room& room,
         DrawRectangleLinesEx(feet_box, 2.0f, RED);
     }
 
+    auto findTopItemAt = [&](Vector2 mouse) -> int {
+        for (auto it = ground_items.rbegin(); it != ground_items.rend(); ++it) {
+            if (CheckCollisionPointRec(mouse, it->tile_box)) return it->msg->id;
+        }
+        return -1;
+    };
+
+    const Vector2 mouse = GetMousePosition();
+    const bool mouse_in_map = mouse.x >= 0.0f &&
+                              mouse.y >= 0.0f &&
+                              mouse.x < (GetScreenWidth() - cfg.inventory_panel_width) &&
+                              mouse.y < (GetScreenHeight() - cfg.bottom_panel_height);
+    const int hovered_item_id = mouse_in_map ? findTopItemAt(mouse) : -1;
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && scene_state.dragging_ground_item_id < 0 && hovered_item_id >= 0) {
+        scene_state.dragging_ground_item_id = hovered_item_id;
+    }
+    if (scene_state.dragging_ground_item_id >= 0 && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+        if (mouse_in_map) {
+            const int tx = static_cast<int>(std::floor(mouse.x / tile_w));
+            const int ty = static_cast<int>(std::floor(mouse.y / tile_h));
+            out.move_ground_item = MoveGroundItemMsg{scene_state.dragging_ground_item_id, tx, ty};
+        }
+        scene_state.dragging_ground_item_id = -1;
+    }
+    if (scene_state.dragging_ground_item_id >= 0 || hovered_item_id >= 0) {
+        SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+    } else {
+        SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    }
+
+    for (const auto& itv : ground_items) {
+        if (itv.msg->id == scene_state.dragging_ground_item_id) continue;
+        if (itv.ready && itv.sprites) {
+            const Frame* fr = itv.sprites->frame(itv.msg->sprite_name, Dir::W, 0);
+            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0);
+            if (fr) {
+                const Rectangle src = fr->rect();
+                Rectangle dst{itv.tile_box.x, itv.tile_box.y, src.width * cfg.map_scale, src.height * cfg.map_scale};
+                dst.x += (tile_w - dst.width) * 0.5f;
+                dst.y += tile_h - dst.height;
+                DrawTexturePro(itv.tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
+            } else {
+                DrawRectangleRec(itv.tile_box, GOLD);
+            }
+        } else {
+            DrawRectangle(static_cast<int>(itv.tile_box.x + tile_w * 0.25f),
+                          static_cast<int>(itv.tile_box.y + tile_h * 0.25f),
+                          static_cast<int>(tile_w * 0.5f),
+                          static_cast<int>(tile_h * 0.5f),
+                          GOLD);
+        }
+    }
+
     std::sort(draw_cmds.begin(), draw_cmds.end(), [](const DrawCmd& a, const DrawCmd& b) {
         if (a.feet_y != b.feet_y) return a.feet_y < b.feet_y;
         return a.kind < b.kind;
@@ -206,6 +278,32 @@ void drawScene(const Room& room,
         }
     }
 
+    if (scene_state.dragging_ground_item_id >= 0) {
+        const GroundItemVisual* drag_item = nullptr;
+        for (const auto& itv : ground_items) {
+            if (itv.msg->id == scene_state.dragging_ground_item_id) {
+                drag_item = &itv;
+                break;
+            }
+        }
+        if (drag_item) {
+            if (drag_item->ready && drag_item->sprites) {
+                const Frame* fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::W, 0);
+                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0);
+                if (fr) {
+                    const Rectangle src = fr->rect();
+                    Rectangle dst{mouse.x - (src.width * cfg.map_scale * 0.5f),
+                                  mouse.y - (src.height * cfg.map_scale * 0.75f),
+                                  src.width * cfg.map_scale,
+                                  src.height * cfg.map_scale};
+                    DrawTexturePro(drag_item->tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, 0.85f));
+                }
+            } else {
+                DrawCircleV(mouse, 8.0f, Fade(GOLD, 0.8f));
+            }
+        }
+    }
+
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
         drawHealthBar(mv.click_box.x, mv.click_box.y - 8, mv.click_box.width, m.hp, m.max_hp);
@@ -229,7 +327,6 @@ void drawScene(const Room& room,
     }
 
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-        const Vector2 mouse = GetMousePosition();
         if (mouse.x < GetScreenWidth() - cfg.inventory_panel_width) {
             int target = -1;
             for (auto it = monster_click_boxes.rbegin(); it != monster_click_boxes.rend(); ++it) {

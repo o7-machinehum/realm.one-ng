@@ -85,7 +85,7 @@ void RoomRenderer::draw(const Room& room, float scale, Vector2 origin) const {
     if (sets_.empty()) return;
 
     for (const auto& layer : room.layers()) {
-        if (layer.name == "Monsters") continue; // spawn metadata layer
+        if (layer.name == "Monsters" || layer.name == "Items") continue; // metadata layers
         for (int y = 0; y < layer.height; y++) {
             for (int x = 0; x < layer.width; x++) {
                 uint32_t gid = layer.gids[y * layer.width + x];
