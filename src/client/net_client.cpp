@@ -72,9 +72,9 @@ void NetClient::recvLoop() {
                             mailbox_.push(MsgType::Chat, std::move(chat));
                             break;
                         }
-                        case MsgType::Login: {
-                            LoginMsg login = fromBytes<LoginMsg>(env.payload.data(), env.payload.size());
-                            mailbox_.push(MsgType::Login, std::move(login));
+                        case MsgType::LoginResult: {
+                            LoginResultMsg result = fromBytes<LoginResultMsg>(env.payload.data(), env.payload.size());
+                            mailbox_.push(MsgType::LoginResult, std::move(result));
                             break;
                         }
                     }

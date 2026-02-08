@@ -7,10 +7,13 @@
 #include "msg.h"
 #include "envelope.h"
 
+class World;
+class AuthDb;
+
 class NetServer {
 public:
-    NetServer(Mailbox& mailbox, uint16_t port)
-        : mailbox_(mailbox), port_(port)  {}
+    NetServer(Mailbox& mailbox, World& world, AuthDb& auth_db, uint16_t port)
+        : mailbox_(mailbox), world_(world), auth_db_(auth_db), port_(port)  {}
 
     void start() {
         recv_thread_ = std::thread(&NetServer::recvLoop, this);
@@ -24,6 +27,8 @@ public:
 
 private:
     Mailbox& mailbox_;
+    World& world_;
+    AuthDb& auth_db_;
     std::thread recv_thread_;
     std::atomic<bool> running_{true};
 

@@ -15,7 +15,8 @@
 enum class MsgType : uint16_t {
     Login = 1,
     Chat,
-    Room
+    Room,
+    LoginResult
 };
 
 struct LoginMsg {
@@ -38,7 +39,20 @@ struct ChatMsg {
     }
 };
 
-using Message = std::variant<LoginMsg, ChatMsg, Room>;
+struct LoginResultMsg {
+    bool ok = false;
+    std::string message;
+    std::string user;
+    std::string room;
+    int exp = 0;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(ok, message, user, room, exp);
+    }
+};
+
+using Message = std::variant<LoginMsg, ChatMsg, Room, LoginResultMsg>;
 
 class Mailbox {
 public:

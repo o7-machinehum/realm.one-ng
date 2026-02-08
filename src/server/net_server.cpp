@@ -1,4 +1,8 @@
 #include "net_server.h"
+#include "auth_db.h"
+#include "world.h"
+
+#include <iostream>
 
 static void sendWire(ENetPeer* peer,
                      uint8_t channel,
@@ -28,9 +32,6 @@ void NetServer::recvLoop() {
 
     std::cout << "[server] listening on port " << port_ << "\n";
 
-    Room room;
-    if (!room.loadFromFile("data/rooms/d1.tmx"));
-
     while (true) {
         ENetEvent ev{};
         // 100ms service tick (polling)
@@ -40,7 +41,6 @@ void NetServer::recvLoop() {
                 printPeerIp(ev.peer->address);
                 std::cout << "\n";
             }
-
             else if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
                 try {
                     Envelope env = fromBytes<Envelope>(ev.packet->data, ev.packet->dataLength);
@@ -49,11 +49,29 @@ void NetServer::recvLoop() {
                         case MsgType::Login: {
                             LoginMsg m = fromBytes<LoginMsg>(env.payload.data(), env.payload.size());
 
-                            std::cout << "[server] LOGIN user=" << m.user
-                                      << " pass=" << m.pass << "\n";
+                            std::string room_name;
+                            std::string message;
+                            int exp = 0;
+                            bool ok = auth_db_.verifyOrCreateUser(m.user, m.pass, room_name, exp, message);
 
-                            auto wire = pack(MsgType::Room, room);
-                            sendWire(ev.peer, /*channel*/ 0, wire);
+                            LoginResultMsg result;
+                            result.ok = ok;
+                            result.message = message;
+                            result.user = m.user;
+                            result.room = room_name;
+                            result.exp = exp;
+                            sendWire(ev.peer, 0, pack(MsgType::LoginResult, result));
+
+                            std::cout << "[server] LOGIN user=" << m.user
+                                      << " result=" << (ok ? "ok" : "failed")
+                                      << " room=" << room_name << "\n";
+
+                            if (ok) {
+                                const Room* room = world_.getRoom(room_name);
+                                if (!room) room = world_.defaultRoom();
+                                if (room) sendWire(ev.peer, 0, pack(MsgType::Room, *room));
+                            }
+
                             enet_host_flush(server);
                         } break;
 

@@ -20,4 +20,18 @@ World::World(std::string world_dir) {
             }
         }
     }
+
+    if (!_world.empty() && _world.find(default_room_name_) == _world.end()) {
+        default_room_name_ = _world.begin()->first;
+    }
+}
+
+const Room* World::getRoom(const std::string& name) const {
+    auto it = _world.find(name);
+    if (it == _world.end()) return nullptr;
+    return it->second.get();
+}
+
+const Room* World::defaultRoom() const {
+    return getRoom(default_room_name_);
 }

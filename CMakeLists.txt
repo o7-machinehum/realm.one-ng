@@ -11,13 +11,13 @@ find_package(cereal REQUIRED)
 # ENet doesn't have a CMake config, use pkg-config
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ENET REQUIRED libenet)
+pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
 # Shared code
 add_library(qg_common
   src/commmon/sprites.cpp
   src/commmon/room.cpp
   src/commmon/entity.cpp
-  src/commmon/character.cpp
   src/client/room_render.cpp
 )
 
@@ -52,16 +52,19 @@ add_executable(server
     src/server/server.cpp
     src/server/net_server.cpp
     src/server/world.cpp
+    src/server/auth_db.cpp
 )
 
 target_link_libraries(server PRIVATE
     ${ENET_LIBRARIES}
+    ${SQLITE3_LIBRARIES}
     qg_common
     raylib
 )
 
 target_include_directories(server PRIVATE
     ${ENET_INCLUDE_DIRS}
+    ${SQLITE3_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
     ${CMAKE_CURRENT_SOURCE_DIR}/src/commmon
 )
