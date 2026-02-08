@@ -210,7 +210,7 @@ void NetServer::recvLoop() {
             def.id,
             def.name,
             def.sprite_tileset,
-            def.sprite_name,
+            def.id,
             room_name,
             x,
             y
@@ -633,7 +633,7 @@ void NetServer::recvLoop() {
                                 if (def_it != item_defs_by_id.end()) {
                                     item_id = def_it->second->id;
                                     sprite_tileset = def_it->second->sprite_tileset;
-                                    sprite_name = def_it->second->sprite_name;
+                                    sprite_name = def_it->second->id;
                                 }
                                 items.push_back(GroundItemRuntime{
                                     next_item_id++,

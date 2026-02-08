@@ -6,7 +6,7 @@ Each item template is one `.toml` file in this folder.
 - Display name: `name`
 - Sprite linkage:
   - `sprite_tileset`: TSX filename under `game/assets/art`
-  - `sprite_name`: tile property name in that TSX (typically `name` or `item_name`)
+  - Sprite clip name is always item id (filename stem), no extra field.
 
 ## Spawn Flow (Tiled -> TOML -> Game)
 

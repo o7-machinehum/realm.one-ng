@@ -54,7 +54,6 @@ struct ItemUiDef {
     std::string id;
     std::string name;
     std::string sprite_tileset;
-    std::string sprite_name;
     std::string equip_type;
 };
 
@@ -83,11 +82,9 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
             const std::string value = trim(line.substr(eq + 1));
             if (key == "name") def.name = parseTomlString(value);
             else if (key == "sprite_tileset") def.sprite_tileset = parseTomlString(value);
-            else if (key == "sprite_name") def.sprite_name = parseTomlString(value);
             else if (key == "equip_type" || key == "item_type" || key == "type" || key == "slot") def.equip_type = parseTomlString(value);
         }
         if (def.sprite_tileset.empty()) def.sprite_tileset = "materials2.tsx";
-        if (def.sprite_name.empty()) def.sprite_name = def.id;
         out.push_back(std::move(def));
     }
     return out;
@@ -304,7 +301,7 @@ int main(int argc, char** argv) {
                 if (dit == item_defs_by_key.end()) continue;
                 const auto& def = dit->second;
                 auto& entry = item_sheet_cache[def.sprite_tileset];
-                const std::string size_key = toLower(def.sprite_name);
+                const std::string size_key = toLower(def.id);
                 const std::pair<int, int> size_val{1, 1};
                 bool needs_reload = !entry.ready;
                 auto sit = entry.size_overrides.find(size_key);
@@ -419,8 +416,8 @@ int main(int argc, char** argv) {
                 auto it = item_sheet_cache.find(def.sprite_tileset);
                 if (it == item_sheet_cache.end()) return false;
                 if (!it->second.ready) return false;
-                const Frame* fr = it->second.sprites.frame(def.sprite_name, Dir::W, 0);
-                if (!fr) fr = it->second.sprites.frame(def.sprite_name, Dir::S, 0);
+                const Frame* fr = it->second.sprites.frame(def.id, Dir::W, 0);
+                if (!fr) fr = it->second.sprites.frame(def.id, Dir::S, 0);
                 if (!fr) return false;
                 const Rectangle src = fr->rect();
                 const float scale = std::min(icon_rect.width / src.width, icon_rect.height / src.height);

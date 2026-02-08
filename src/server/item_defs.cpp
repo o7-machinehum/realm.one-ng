@@ -73,7 +73,6 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
 
         if (key == "name") out.name = parseStringValue(raw_val);
         else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
-        else if (key == "sprite_name") out.sprite_name = parseStringValue(raw_val);
         else if (key == "item_type" || key == "equip_type" || key == "type" || key == "slot") out.item_type = parseStringValue(raw_val);
         else if (key == "stackable") {
             bool b = out.stackable;
@@ -89,7 +88,6 @@ ItemDef fallbackDefFromId(const std::string& id) {
     d.id = id;
     d.name = id;
     d.sprite_tileset = "materials2.tsx";
-    d.sprite_name = id;
     return d;
 }
 
@@ -112,7 +110,6 @@ std::vector<ItemDef> loadItemDefs(const std::string& dir_path) {
 
         if (d.name.empty()) d.name = d.id;
         if (d.sprite_tileset.empty()) d.sprite_tileset = "materials2.tsx";
-        if (d.sprite_name.empty()) d.sprite_name = d.id;
 
         defs.push_back(std::move(d));
     }

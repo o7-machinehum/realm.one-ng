@@ -1,6 +1,0 @@
-name = "Monster Loot"
-sprite_tileset = "materials2.tsx"
-sprite_name = "wooden_sword"
-stackable = true
-
-# Placeholder art/value. Update once you add dedicated loot sprites.

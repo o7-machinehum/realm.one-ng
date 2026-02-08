@@ -6,4 +6,9 @@
    <property name="name" value="wooden_sword"/>
   </properties>
  </tile>
+ <tile id="14">
+  <properties>
+   <property name="name" value="wooden_sheld"/>
+  </properties>
+ </tile>
 </tileset>

@@ -1,7 +1,7 @@
-name = "Wooden Sword"
+name = "Wooden Shield"
 sprite_tileset = "materials2.tsx"
 stackable = false
-item_type = "Weapon"
+item_type = "Shield"
 
 # Extra designer fields (optional):
 # attack = 6
