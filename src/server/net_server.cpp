@@ -15,6 +15,14 @@
 #include <vector>
 
 namespace {
+constexpr int kDefaultFacingSouth = 2;
+constexpr int kMaxMoveStep = 1;
+constexpr int kMeleeRangeTiles = 1;
+constexpr int kThrowRangeTiles = 5;
+constexpr int kInventoryLimit = 8;
+constexpr int kCombatDamagePerTick = 6;
+constexpr int kTickMs = 500;
+constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick
 
 struct MonsterRuntime {
     int id = 0;
@@ -29,7 +37,7 @@ struct MonsterRuntime {
     int size_h = 1;
     int hp = 30;
     int max_hp = 30;
-    int facing = 2; // S
+    int facing = kDefaultFacingSouth; // S
     uint32_t attack_anim_seq = 0;
     int speed_ms = 500;
     int move_accum_ms = 0;
@@ -59,7 +67,7 @@ struct PlayerRuntime {
     int max_hp = 100;
     int mana = 60;
     int max_mana = 60;
-    int facing = 2; // S
+    int facing = kDefaultFacingSouth; // S
     uint32_t attack_anim_seq = 0;
     int attack_target_monster_id = -1;
 };
@@ -83,12 +91,12 @@ void printPeerIp(const ENetAddress& a) {
 }
 
 int clampStep(int d) {
-    if (d > 1) return 1;
-    if (d < -1) return -1;
+    if (d > kMaxMoveStep) return kMaxMoveStep;
+    if (d < -kMaxMoveStep) return -kMaxMoveStep;
     return d;
 }
 
-int facingFromDelta(int dx, int dy, int fallback = 2) {
+int facingFromDelta(int dx, int dy, int fallback = kDefaultFacingSouth) {
     if (dx > 0) return 1;
     if (dx < 0) return 3;
     if (dy > 0) return 2;
@@ -339,6 +347,7 @@ void NetServer::recvLoop() {
         if (p.authenticated) auth_db_.savePlayer(p.data);
     };
 
+    // Pushes the authoritative room-local snapshot to every authenticated client.
     auto broadcastState = [&](const std::string& event_text) {
         for (const auto& [peer, p] : players) {
             if (!p.authenticated) continue;
@@ -406,7 +415,7 @@ void NetServer::recvLoop() {
         if (item.room != p.data.room) return false;
         const int dx = std::abs(p.data.x - item.x);
         const int dy = std::abs(p.data.y - item.y);
-        return std::max(dx, dy) <= 1;
+        return std::max(dx, dy) <= kMeleeRangeTiles;
     };
 
     auto findGroundItemIndexById = [&](const PlayerRuntime& p, int item_id) -> int {
@@ -465,9 +474,13 @@ void NetServer::recvLoop() {
         return r <= clamped;
     };
 
-    const auto tick_dt = std::chrono::milliseconds(500);
+    const auto tick_dt = std::chrono::milliseconds(kTickMs);
     auto last_tick = std::chrono::steady_clock::now();
 
+    // Main server loop:
+    // 1) drain ENet events (input/messages),
+    // 2) advance fixed-rate combat/AI tick,
+    // 3) broadcast updated game state when something changes.
     while (running_) {
         ENetEvent ev{};
         while (enet_host_service(server, &ev, 40) > 0) {
@@ -646,7 +659,6 @@ void NetServer::recvLoop() {
 
                             const int idx = findPickupCandidateIndex(player, m.item_id);
 
-                            constexpr int kInventoryLimit = 8;
                             std::string event = player.data.username + " found no item";
                             if (idx >= 0) {
                                 if (static_cast<int>(player.data.inventory.size()) >= kInventoryLimit) {
@@ -693,7 +705,7 @@ void NetServer::recvLoop() {
                                     break;
                                 }
                                 const int throw_dist = tileDistance(player.data.x, player.data.y, drop_x, drop_y);
-                                if (throw_dist > 5) break;
+                                if (throw_dist > kThrowRangeTiles) break;
 
                                 const std::string inv_entry = player.data.inventory[m.inventory_index];
                                 GroundItemRuntime drop_item{};
@@ -805,7 +817,7 @@ void NetServer::recvLoop() {
                             if (!isItemReachableByPlayer(player, items[(size_t)idx])) break;
 
                             const int throw_dist = tileDistance(m.to_x, m.to_y, player.data.x, player.data.y);
-                            if (throw_dist > 5) break;
+                            if (throw_dist > kThrowRangeTiles) break;
 
                             items[idx].x = m.to_x;
                             items[idx].y = m.to_y;
@@ -876,7 +888,7 @@ void NetServer::recvLoop() {
                 }
 
                 const int dist = std::abs(mon.x - p.data.x) + std::abs(mon.y - p.data.y);
-                if (dist > 1) {
+                if (dist > kMeleeRangeTiles) {
                     continue;
                 }
 
@@ -885,7 +897,7 @@ void NetServer::recvLoop() {
                 mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
                 mon.attack_anim_seq += 1;
 
-                const int dmg = 6;
+                const int dmg = kCombatDamagePerTick;
                 mon.hp = std::max(0, mon.hp - dmg);
                 changed = true;
                 tick_event = p.data.username + " hits " + mon.name + " for " + std::to_string(dmg);
@@ -924,7 +936,7 @@ void NetServer::recvLoop() {
                 mon.move_accum_ms = 0;
 
                 // 25% chance to idle this tick to avoid jittery movement.
-                if ((std::rand() % 4) == 0) continue;
+                if ((std::rand() % kMonsterIdleChanceDivisor) == 0) continue;
 
                 static constexpr int dirs[4][2] = {
                     {0, -1}, {1, 0}, {0, 1}, {-1, 0}

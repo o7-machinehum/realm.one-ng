@@ -32,7 +32,9 @@ target_link_libraries(qg_common PUBLIC
 # ----- Client
 add_executable(client
     src/client/client.cpp
+    src/client/client_layout.cpp
     src/client/client_support.cpp
+    src/client/client_sheet_cache.cpp
     src/client/client_scene_renderer.cpp
     src/client/client_inventory_ui.cpp
     src/client/client_windows.cpp

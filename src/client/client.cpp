@@ -2,7 +2,9 @@
 
 #include "client_support.h"
 #include "client_inventory_ui.h"
+#include "client_layout.h"
 #include "client_scene_renderer.h"
+#include "client_sheet_cache.h"
 #include "client_windows.h"
 #include "msg.h"
 #include "monster_defs.h"
@@ -16,91 +18,23 @@
 #include <string>
 #include <unordered_map>
 #include <algorithm>
-#include <cctype>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <vector>
 
 namespace {
-struct SpriteSheetCacheEntry {
-    Sprites sprites;
-    Texture2D tex{};
-    bool ready = false;
-    Sprites::SizeOverrideMap size_overrides;
-};
-
-std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
-
-std::string trim(std::string s) {
-    auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) s.pop_back();
-    return s;
-}
-
-std::string parseTomlString(const std::string& raw) {
-    std::string v = trim(raw);
-    if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
-        return v.substr(1, v.size() - 2);
-    }
-    return v;
-}
-
-struct ItemUiDef {
-    std::string id;
-    std::string name;
-    std::string sprite_tileset;
-    std::string equip_type;
-};
-
-std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
-    std::vector<ItemUiDef> out;
-    namespace fs = std::filesystem;
-    fs::path dir(dir_path);
-    if (!fs::exists(dir) || !fs::is_directory(dir)) return out;
-
-    for (const auto& entry : fs::directory_iterator(dir)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".toml") continue;
-        ItemUiDef def;
-        def.id = entry.path().stem().string();
-        def.name = def.id;
-        std::ifstream in(entry.path());
-        if (!in) continue;
-        std::string line;
-        while (std::getline(in, line)) {
-            const auto hash = line.find('#');
-            if (hash != std::string::npos) line = line.substr(0, hash);
-            line = trim(line);
-            if (line.empty() || line.front() == '[') continue;
-            const auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
-            const std::string key = trim(line.substr(0, eq));
-            const std::string value = trim(line.substr(eq + 1));
-            if (key == "name") def.name = parseTomlString(value);
-            else if (key == "sprite_tileset") def.sprite_tileset = parseTomlString(value);
-            else if (key == "equip_type" || key == "item_type" || key == "type" || key == "slot") def.equip_type = parseTomlString(value);
-        }
-        if (def.sprite_tileset.empty()) def.sprite_tileset = "materials2.tsx";
-        out.push_back(std::move(def));
-    }
-    return out;
-}
-
-constexpr const char* kCorpsePrefix = "corpse:";
-
-std::string parseCorpseMonsterId(const std::string& raw) {
-    const std::string n = toLower(trim(raw));
-    const std::string prefix = kCorpsePrefix;
-    if (n.rfind(prefix, 0) != 0) return {};
-    return n.substr(prefix.size());
-}
+constexpr int kInitialWindowW = 1200;
+constexpr int kInitialWindowH = 760;
+constexpr int kMaxInputChars = 180;
+constexpr int kGameplayBottomPanelPx = 0;
+constexpr float kPlayViewportMaxWidthRatio = 0.92f;
+constexpr float kPlayViewportMaxHeightRatio = 0.88f;
+constexpr float kDockMarginTop = 10.0f;
+constexpr float kDockMarginRight = 10.0f;
+constexpr float kDockWindowGapY = 8.0f;
+constexpr float kInputOverlayHeight = 28.0f;
+constexpr float kInputOverlayMargin = 8.0f;
+constexpr float kInputTextOffsetX = 8.0f;
+constexpr float kInputTextOffsetY = 5.0f;
 
 void drawLabeledBar(Font font,
                     const std::string& label,
@@ -126,7 +60,7 @@ void drawLabeledBar(Font font,
 } // namespace
 
 int main(int argc, char** argv) {
-    InitWindow(1200, 760, "The Island");
+    InitWindow(kInitialWindowW, kInitialWindowH, "The Island");
     SetTargetFPS(60);
 
     std::string host = "127.0.0.1";
@@ -161,9 +95,9 @@ int main(int argc, char** argv) {
     client::SceneState scene_state;
     client::InventoryUiState inventory_ui_state;
     client::UiWindowsState ui_windows_state;
-    std::unordered_map<std::string, SpriteSheetCacheEntry> monster_sheet_cache;
-    std::unordered_map<std::string, SpriteSheetCacheEntry> item_sheet_cache;
-    std::unordered_map<std::string, ItemUiDef> item_defs_by_key;
+    std::unordered_map<std::string, client::SpriteSheetCacheEntry> monster_sheet_cache;
+    std::unordered_map<std::string, client::SpriteSheetCacheEntry> item_sheet_cache;
+    std::unordered_map<std::string, client::ItemUiDef> item_defs_by_key;
     std::unordered_map<std::string, MonsterDef> monster_defs_by_id;
     float move_repeat_timer = 0.0f;
     bool move_repeat_started = false;
@@ -173,17 +107,17 @@ int main(int argc, char** argv) {
     const client::SceneConfig scene_cfg{};
     const client::InventoryUiConfig inventory_cfg{};
 
-    for (const auto& def : loadClientItemDefs("game/items")) {
-        item_defs_by_key[toLower(def.id)] = def;
-        item_defs_by_key[toLower(def.name)] = def;
+    for (const auto& def : client::loadClientItemDefs("game/items")) {
+        item_defs_by_key[client::normalizeKey(def.id)] = def;
+        item_defs_by_key[client::normalizeKey(def.name)] = def;
     }
     for (const auto& def : loadMonsterDefs("game/monsters")) {
-        monster_defs_by_id[toLower(def.id)] = def;
+        monster_defs_by_id[client::normalizeKey(def.id)] = def;
     }
 
     while (!WindowShouldClose()) {
         while (int key = GetCharPressed()) {
-            if (key >= 32 && key <= 126 && input.size() < 180) {
+            if (key >= 32 && key <= 126 && input.size() < kMaxInputChars) {
                 input.push_back(static_cast<char>(key));
             }
         }
@@ -298,109 +232,9 @@ int main(int argc, char** argv) {
                 scene_state.dragging_ground_item_id = -1;
             }
             last_game_state_room = game_state->your_room;
-            for (const auto& m : game_state->monsters) {
-                if (m.sprite_tileset.empty()) continue;
-                auto& entry = monster_sheet_cache[m.sprite_tileset];
-                const std::string size_key = m.sprite_name.empty() ? toLower(m.name) : toLower(m.sprite_name);
-                const std::pair<int, int> size_val{
-                    std::max(1, m.sprite_w_tiles),
-                    std::max(1, m.sprite_h_tiles)
-                };
-                bool needs_reload = !entry.ready;
-                auto sit = entry.size_overrides.find(size_key);
-                if (sit == entry.size_overrides.end() || sit->second != size_val) {
-                    entry.size_overrides[size_key] = size_val;
-                    needs_reload = true;
-                }
-                if (!needs_reload) continue;
-
-                if (entry.tex.id != 0) {
-                    UnloadTexture(entry.tex);
-                    entry.tex = Texture2D{};
-                }
-                const std::string tsx_path = "game/assets/art/" + m.sprite_tileset;
-                if (entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
-                    const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
-                    entry.tex = LoadTexture(tex_path.c_str());
-                    entry.ready = (entry.tex.id != 0);
-                } else {
-                    entry.ready = false;
-                }
-            }
-            for (const auto& i : game_state->items) {
-                if (i.sprite_tileset.empty() || i.sprite_name.empty()) continue;
-                auto& entry = item_sheet_cache[i.sprite_tileset];
-                const std::string size_key = toLower(i.sprite_name);
-                const std::pair<int, int> size_val{
-                    std::max(1, i.sprite_w_tiles),
-                    std::max(1, i.sprite_h_tiles)
-                };
-                bool needs_reload = !entry.ready;
-                auto sit = entry.size_overrides.find(size_key);
-                if (sit == entry.size_overrides.end() || sit->second != size_val) {
-                    entry.size_overrides[size_key] = size_val;
-                    needs_reload = true;
-                }
-                if (!needs_reload) continue;
-
-                if (entry.tex.id != 0) {
-                    UnloadTexture(entry.tex);
-                    entry.tex = Texture2D{};
-                }
-                const std::string tsx_path = "game/assets/art/" + i.sprite_tileset;
-                if (entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
-                    const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
-                    entry.tex = LoadTexture(tex_path.c_str());
-                    entry.ready = (entry.tex.id != 0);
-                } else {
-                    entry.ready = false;
-                }
-            }
-            for (const auto& inv_item : game_state->inventory) {
-                auto dit = item_defs_by_key.find(toLower(inv_item));
-                std::string tsx;
-                std::string size_key;
-                std::pair<int, int> size_val{1, 1};
-
-                if (dit != item_defs_by_key.end()) {
-                    const auto& def = dit->second;
-                    tsx = def.sprite_tileset;
-                    size_key = toLower(def.id);
-                } else {
-                    const std::string corpse_id = parseCorpseMonsterId(inv_item);
-                    if (corpse_id.empty()) continue;
-                    auto mit = monster_defs_by_id.find(corpse_id);
-                    if (mit == monster_defs_by_id.end()) continue;
-                    tsx = mit->second.sprite_tileset;
-                    size_key = toLower(mit->second.id);
-                    size_val = {
-                        std::max(1, mit->second.monster_size_w),
-                        std::max(1, mit->second.monster_size_h)
-                    };
-                }
-
-                auto& entry = item_sheet_cache[tsx];
-                bool needs_reload = !entry.ready;
-                auto sit = entry.size_overrides.find(size_key);
-                if (sit == entry.size_overrides.end() || sit->second != size_val) {
-                    entry.size_overrides[size_key] = size_val;
-                    needs_reload = true;
-                }
-                if (!needs_reload) continue;
-
-                if (entry.tex.id != 0) {
-                    UnloadTexture(entry.tex);
-                    entry.tex = Texture2D{};
-                }
-                const std::string tsx_path = "game/assets/art/" + tsx;
-                if (entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
-                    const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
-                    entry.tex = LoadTexture(tex_path.c_str());
-                    entry.ready = (entry.tex.id != 0);
-                } else {
-                    entry.ready = false;
-                }
-            }
+            client::updateMonsterSheetCache(*game_state, monster_sheet_cache);
+            client::updateItemSheetCacheFromGroundItems(*game_state, item_sheet_cache);
+            client::updateItemSheetCacheFromInventory(*game_state, item_defs_by_key, monster_defs_by_id, item_sheet_cache);
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
                 last_event = game_state->event_text;
             }
@@ -410,37 +244,18 @@ int main(int argc, char** argv) {
         ClearBackground(BLACK);
 
         const int side_w = static_cast<int>(inventory_cfg.panel_w);
-        const int bottom_h = 0;
-        const int left_region_w = std::max(1, GetScreenWidth() - side_w);
-        const int left_region_h = std::max(1, GetScreenHeight() - bottom_h);
-        const int max_play_w = std::max(1, static_cast<int>(left_region_w * 0.92f));
-        const int max_play_h = std::max(1, static_cast<int>(left_region_h * 0.88f));
-        float map_px_w = 0.0f;
-        float map_px_h = 0.0f;
-        float map_aspect = static_cast<float>(max_play_w) / static_cast<float>(max_play_h);
-        if (current_room) {
-            map_px_w = static_cast<float>(current_room->map_width() * current_room->tile_width());
-            map_px_h = static_cast<float>(current_room->map_height() * current_room->tile_height());
-            if (map_px_w > 0.0f && map_px_h > 0.0f) {
-                map_aspect = map_px_w / map_px_h;
-            }
-        }
-        int play_w = max_play_w;
-        int play_h = std::max(1, static_cast<int>(std::lround(play_w / map_aspect)));
-        if (play_h > max_play_h) {
-            play_h = max_play_h;
-            play_w = std::max(1, static_cast<int>(std::lround(play_h * map_aspect)));
-        }
-        const int play_x = std::max(0, (left_region_w - play_w) / 2);
-        const int play_y = std::max(0, (left_region_h - play_h) / 2);
-        const Rectangle play_rect{
-            static_cast<float>(play_x),
-            static_cast<float>(play_y),
-            static_cast<float>(play_w),
-            static_cast<float>(play_h)
-        };
-        const float right_x = static_cast<float>(GetScreenWidth()) - inventory_cfg.panel_w - 10.0f;
-        auto& vitals_window = client::ensureWindow(ui_windows_state, "vitals", "Health / Mana", Rectangle{right_x, 10.0f, inventory_cfg.panel_w, 106.0f}, true);
+        const int bottom_h = kGameplayBottomPanelPx;
+        const client::PlayLayout play_layout = client::computePlayLayout(
+            current_room, side_w, bottom_h, kPlayViewportMaxWidthRatio, kPlayViewportMaxHeightRatio, scene_cfg.map_scale);
+        const Rectangle play_rect = play_layout.play_rect;
+        const int play_x = static_cast<int>(play_rect.x);
+        const int play_y = static_cast<int>(play_rect.y);
+        const int play_w = static_cast<int>(play_rect.width);
+        const int play_h = static_cast<int>(play_rect.height);
+
+        // Right-lane windows are persisted in state; we only seed defaults once.
+        const float right_x = static_cast<float>(GetScreenWidth()) - inventory_cfg.panel_w - kDockMarginRight;
+        auto& vitals_window = client::ensureWindow(ui_windows_state, "vitals", "Health / Mana", Rectangle{right_x, kDockMarginTop, inventory_cfg.panel_w, 106.0f}, true);
         auto& inventory_window = client::ensureWindow(ui_windows_state, "inventory", "Inventory", Rectangle{right_x, 126.0f, inventory_cfg.panel_w, 420.0f}, true);
         auto& skills_window = client::ensureWindow(ui_windows_state, "skills", "Skills", Rectangle{right_x, 556.0f, inventory_cfg.panel_w, 174.0f}, true);
         constexpr int kInvSlotLimit = 8;
@@ -453,42 +268,25 @@ int main(int argc, char** argv) {
         vitals_window.rect.x = right_x;
         inventory_window.rect.x = right_x;
         skills_window.rect.x = right_x;
+
         if (ui_windows_state.dragging_id.empty()) {
-            std::vector<client::UiWindow*> stack{&vitals_window, &inventory_window, &skills_window};
-            std::sort(stack.begin(), stack.end(), [](const client::UiWindow* a, const client::UiWindow* b) {
-                return a->rect.y < b->rect.y;
-            });
-            float y = 10.0f;
-            constexpr float gap = 8.0f;
-            for (client::UiWindow* w : stack) {
-                w->rect.x = right_x;
-                w->rect.y = y;
-                y += client::windowFrameHeight(*w) + gap;
-            }
+            client::snapDockedWindows({&vitals_window, &inventory_window, &skills_window},
+                                      right_x,
+                                      kDockMarginTop,
+                                      kDockWindowGapY);
         }
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 22, 255});
         DrawRectangleRec(play_rect, BLACK);
         DrawRectangleLinesEx(play_rect, 1.0f, Color{72, 76, 84, 255});
-        float render_scale = scene_cfg.map_scale;
-        float map_draw_w = static_cast<float>(play_w);
-        float map_draw_h = static_cast<float>(play_h);
-        float map_off_x = 0.0f;
-        float map_off_y = 0.0f;
-        if (current_room) {
-            if (map_px_w > 0.0f && map_px_h > 0.0f) {
-                const float fill_width_scale = static_cast<float>(play_w) / map_px_w;
-                const float fill_height_scale = static_cast<float>(play_h) / map_px_h;
-                const float fit_scale = std::min(fill_width_scale, fill_height_scale);
-                render_scale = std::max(0.5f, fit_scale);
-                map_draw_w = map_px_w * render_scale;
-                map_draw_h = map_px_h * render_scale;
-                map_off_x = std::max(0.0f, (static_cast<float>(play_w) - map_draw_w) * 0.5f);
-                map_off_y = std::max(0.0f, (static_cast<float>(play_h) - map_draw_h) * 0.5f);
-            }
-        }
-        const float map_origin_x = static_cast<float>(play_x) + map_off_x;
-        const float map_origin_y = static_cast<float>(play_y) + map_off_y;
 
+        const float render_scale = play_layout.render_scale;
+        const float map_draw_w = play_layout.map_draw_w;
+        const float map_draw_h = play_layout.map_draw_h;
+        const float map_origin_x = play_layout.map_origin_x;
+        const float map_origin_y = play_layout.map_origin_y;
+
+        // World pass: background layers, entities, then foreground layers.
+        // Scissor guarantees world drawing never bleeds outside play viewport.
         BeginScissorMode(play_x, play_y, play_w, play_h);
         if (current_room) {
             rr.drawUnderEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
@@ -555,6 +353,8 @@ int main(int argc, char** argv) {
         }
         EndScissorMode();
 
+        // UI pass: window frames first (for hit testing + collapse state),
+        // then each window body contents.
         if (game_state) {
             const auto vitals_frame = client::drawWindowFrame(ui_windows_state, ui_font, vitals_window);
             const auto inv_frame = client::drawWindowFrame(ui_windows_state, ui_font, inventory_window);
@@ -571,7 +371,7 @@ int main(int argc, char** argv) {
 
             client::InventoryUiOutput inv_out{};
             const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect) -> bool {
-                auto dit = item_defs_by_key.find(toLower(item_name));
+                auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
                 std::string tsx;
                 std::string sprite_name;
                 ClipKind kind = ClipKind::Move;
@@ -580,7 +380,7 @@ int main(int argc, char** argv) {
                     tsx = def.sprite_tileset;
                     sprite_name = def.id;
                 } else {
-                    const std::string corpse_id = parseCorpseMonsterId(item_name);
+                    const std::string corpse_id = client::parseCorpseMonsterId(item_name);
                     if (corpse_id.empty()) return false;
                     auto mit = monster_defs_by_id.find(corpse_id);
                     if (mit == monster_defs_by_id.end()) return false;
@@ -608,7 +408,7 @@ int main(int argc, char** argv) {
                 return true;
             };
             const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::string {
-                auto dit = item_defs_by_key.find(toLower(item_name));
+                auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
                 if (dit == item_defs_by_key.end()) return {};
                 return dit->second.equip_type;
             };
@@ -644,6 +444,7 @@ int main(int argc, char** argv) {
             if (inv_out.drop_msg.has_value()) {
                 DropMsg drop = *inv_out.drop_msg;
                 if (current_room) {
+                    // Convert drop target from screen-space mouse to map tile-space.
                     const Vector2 m = GetMousePosition();
                     if (m.x >= map_origin_x && m.y >= map_origin_y &&
                         m.x < (map_origin_x + map_draw_w) &&
@@ -663,23 +464,27 @@ int main(int argc, char** argv) {
             }
         }
 
-        const float input_h = 28.0f;
-        const float input_y = static_cast<float>(play_y + play_h) - input_h - 8.0f;
-        DrawRectangle(play_x + 8, static_cast<int>(input_y), play_w - 16, static_cast<int>(input_h), Color{0, 0, 0, 150});
-        DrawRectangleLines(play_x + 8, static_cast<int>(input_y), play_w - 16, static_cast<int>(input_h), Color{90, 90, 90, 220});
+        const float input_h = kInputOverlayHeight;
+        const float input_y = static_cast<float>(play_y + play_h) - input_h - kInputOverlayMargin;
+        DrawRectangle(play_x + static_cast<int>(kInputOverlayMargin),
+                      static_cast<int>(input_y),
+                      play_w - static_cast<int>(kInputOverlayMargin * 2.0f),
+                      static_cast<int>(input_h),
+                      Color{0, 0, 0, 150});
+        DrawRectangleLines(play_x + static_cast<int>(kInputOverlayMargin),
+                           static_cast<int>(input_y),
+                           play_w - static_cast<int>(kInputOverlayMargin * 2.0f),
+                           static_cast<int>(input_h),
+                           Color{90, 90, 90, 220});
         const std::string prompt = "> " + input;
-        client::drawUiText(ui_font, prompt, static_cast<float>(play_x + 16), input_y + 5.0f, 16, YELLOW);
+        client::drawUiText(ui_font, prompt, static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX, input_y + kInputTextOffsetY, 16, YELLOW);
 
         EndDrawing();
     }
 
     nc.stop();
-    for (auto& [_, entry] : monster_sheet_cache) {
-        if (entry.tex.id != 0) UnloadTexture(entry.tex);
-    }
-    for (auto& [_, entry] : item_sheet_cache) {
-        if (entry.tex.id != 0) UnloadTexture(entry.tex);
-    }
+    client::unloadSheetCache(monster_sheet_cache);
+    client::unloadSheetCache(item_sheet_cache);
     if (owns_ui_font) UnloadFont(ui_font);
     if (character_tex.id != 0) UnloadTexture(character_tex);
     CloseWindow();

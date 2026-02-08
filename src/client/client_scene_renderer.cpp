@@ -243,6 +243,8 @@ void drawScene(const Room& room,
         return -1;
     };
 
+    // Mouse interactions are evaluated in map-local coordinates so the same
+    // picking math works regardless of viewport offset/centering.
     const float map_ox = cfg.map_origin_x;
     const float map_oy = cfg.map_origin_y;
     const float map_vw = cfg.map_view_width > 0.0f ? cfg.map_view_width : (cfg.inventory_visible ? (GetScreenWidth() - cfg.inventory_panel_width) : static_cast<float>(GetScreenWidth()));
@@ -262,6 +264,8 @@ void drawScene(const Room& room,
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && scene_state.dragging_ground_item_id < 0 && hovered_item_id >= 0) {
         scene_state.dragging_ground_item_id = hovered_item_id;
     }
+    // Releasing a dragged ground item either throws it onto map tiles or
+    // sends a pickup intent when released over inventory.
     if (scene_state.dragging_ground_item_id >= 0 && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         if (mouse_in_map) {
             const int tx = static_cast<int>(std::floor(mouse_local.x / tile_w));

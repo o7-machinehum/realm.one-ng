@@ -24,6 +24,7 @@ void drawInventoryUi(Font ui_font,
     out.drop_msg.reset();
     out.set_equipment_msg.reset();
 
+    // UI intentionally mirrors the server-side hard inventory cap.
     constexpr int max_slots = 8;
     const int inv_count = std::min(static_cast<int>(game_state.inventory.size()), max_slots);
     const float grid_w = cfg.cols * cfg.slot_size + (cfg.cols - 1) * cfg.gap;
@@ -74,6 +75,9 @@ void drawInventoryUi(Font ui_font,
         }
     }
 
+    // Drop semantics:
+    // - release over another slot => swap
+    // - release outside inventory panel => world drop request
     if (state.drag.active && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         const Vector2 m = GetMousePosition();
         const int to_slot = findInventorySlotAt(m);
