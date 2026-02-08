@@ -156,8 +156,22 @@ void drawTalkBubble(Texture2D speech_tex,
     const float inner_w_px = max_line_w + kSpeechTextPadX * 2.0f;
     const float inner_h_px = text_block_h + kSpeechTextPadY * 2.0f;
 
-    const int inner_cols = std::max(1, static_cast<int>(std::ceil(inner_w_px / tile_px)));
-    const int mid_rows = std::max(1, static_cast<int>(std::ceil(inner_h_px / tile_px)));
+    // Compact mode: short single-line text uses the minimal 3x3 bubble (no e/g/h repeats).
+    // Compact one-liners should avoid extra repeated middle rows.
+    const bool compact_one_liner = (lines.size() == 1 && lines.front().size() <= 14);
+    const bool ultra_compact_one_liner =
+        (lines.size() == 1 &&
+         lines.front().size() <= 6 &&
+         max_line_w <= tile_px * 1.25f);
+
+    const int inner_cols = compact_one_liner
+        ? 1
+        : std::max(1, static_cast<int>(std::ceil(inner_w_px / tile_px)));
+    const int mid_rows = ultra_compact_one_liner
+        ? 0
+        : (compact_one_liner
+        ? 1
+        : std::max(1, static_cast<int>(std::ceil(inner_h_px / tile_px))));
     const int cols = inner_cols + 2;
     const int rows = 1 + mid_rows + 1;
 

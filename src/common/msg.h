@@ -15,6 +15,7 @@
 enum class MsgType : uint16_t {
     Login = 1,
     Chat,
+    ChatSend,
     Room,
     LoginResult,
     Move,

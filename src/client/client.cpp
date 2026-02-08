@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
                         client::pushBounded(logs, "Commands: /login /move /pickup [id] /drop <idx> /attack [id] /talk /think /yell");
                     } else {
                         ChatMsg chat{};
-                        if (parseSpeechInput(input, chat)) mailbox.push(MsgType::Chat, chat);
+                        if (parseSpeechInput(input, chat)) mailbox.push(MsgType::ChatSend, chat);
                         else client::pushBounded(logs, "Unknown command. Use /help");
                     }
                 }

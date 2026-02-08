@@ -59,7 +59,7 @@ void NetClient::recvLoop() {
             sendWire(peer, 0, wire);
             enet_host_flush(client);
         }
-        if (auto chat = mailbox_.pop<ChatMsg>(MsgType::Chat)) {
+        if (auto chat = mailbox_.pop<ChatMsg>(MsgType::ChatSend)) {
             auto wire = pack(MsgType::Chat, *chat);
             sendWire(peer, 0, wire);
             enet_host_flush(client);
@@ -108,6 +108,7 @@ void NetClient::recvLoop() {
                     switch (env.type) {
                         case MsgType::Login:
                         case MsgType::Move:
+                        case MsgType::ChatSend:
                         case MsgType::Rotate:
                         case MsgType::Attack:
                         case MsgType::Pickup:
