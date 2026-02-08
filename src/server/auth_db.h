@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 struct sqlite3;
 
@@ -12,6 +13,7 @@ struct PersistedPlayer {
     int x = 2;
     int y = 2;
     std::vector<std::string> inventory;
+    std::unordered_map<std::string, int> equipment_by_type; // equip_type -> inventory slot index
 };
 
 class AuthDb {

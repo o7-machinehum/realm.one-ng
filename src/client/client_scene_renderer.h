@@ -25,6 +25,7 @@ struct SceneConfig {
     float map_scale = 2.0f;
     float inventory_panel_width = 260.0f;
     float bottom_panel_height = 180.0f;
+    bool inventory_visible = true;
     float player_slide_tiles_per_sec = 10.0f;
     float monster_slide_tiles_per_sec = 8.0f;
 };
@@ -32,6 +33,7 @@ struct SceneConfig {
 struct SceneOutput {
     std::optional<AttackMsg> attack_click;
     std::optional<MoveGroundItemMsg> move_ground_item;
+    std::optional<PickupMsg> pickup_ground_item;
 };
 
 struct SpriteSheetView {

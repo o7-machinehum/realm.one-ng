@@ -1,7 +1,9 @@
 name = "Wooden Sword"
+type = "Weapon - One Handed"
 sprite_tileset = "materials2.tsx"
 sprite_name = "wooden_sword"
 stackable = false
+item_type = "Weapon"
 
 # Extra designer fields (optional):
 # attack = 6

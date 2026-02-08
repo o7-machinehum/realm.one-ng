@@ -51,6 +51,8 @@ struct PlayerRuntime {
     PersistedPlayer data;
     int hp = 100;
     int max_hp = 100;
+    int mana = 60;
+    int max_mana = 60;
     int attack_target_monster_id = -1;
 };
 
@@ -88,6 +90,17 @@ std::string normalizeId(std::string s) {
     return s;
 }
 
+std::vector<EquippedItemMsg> toEquippedMsgVec(const std::unordered_map<std::string, int>& eq,
+                                              const std::vector<std::string>& inventory) {
+    std::vector<EquippedItemMsg> out;
+    out.reserve(eq.size());
+    for (const auto& [t, idx] : eq) {
+        if (t.empty() || idx < 0 || idx >= static_cast<int>(inventory.size())) continue;
+        out.push_back(EquippedItemMsg{t, idx, inventory[(size_t)idx]});
+    }
+    return out;
+}
+
 GameStateMsg makeGameState(const PlayerRuntime& self,
                            const std::unordered_map<ENetPeer*, PlayerRuntime>& players,
                            const std::vector<MonsterRuntime>& monsters,
@@ -101,6 +114,9 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
     gs.your_exp = self.data.exp;
     gs.your_hp = self.hp;
     gs.your_max_hp = self.max_hp;
+    gs.your_mana = self.mana;
+    gs.your_max_mana = self.max_mana;
+    gs.your_equipment = toEquippedMsgVec(self.data.equipment_by_type, self.data.inventory);
     gs.attack_target_monster_id = self.attack_target_monster_id;
     gs.inventory = self.data.inventory;
     gs.event_text = std::move(event_text);
@@ -117,6 +133,9 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
         ps.exp = p.data.exp;
         ps.hp = p.hp;
         ps.max_hp = p.max_hp;
+        ps.mana = p.mana;
+        ps.max_mana = p.max_mana;
+        ps.equipment = toEquippedMsgVec(p.data.equipment_by_type, p.data.inventory);
         gs.players.push_back(std::move(ps));
     }
 
@@ -196,6 +215,17 @@ void NetServer::recvLoop() {
             x,
             y
         });
+    };
+
+    auto canonicalEquipType = [&](const std::string& raw) -> std::string {
+        const std::string n = normalizeId(raw);
+        if (n == "weapon") return "Weapon";
+        if (n == "armor") return "Armor";
+        if (n == "shield") return "Shield";
+        if (n == "legs") return "Legs";
+        if (n == "boots") return "Boots";
+        if (n == "helmet") return "Helmet";
+        return {};
     };
 
     for (const auto& room_name : world_.roomNames()) {
@@ -303,6 +333,34 @@ void NetServer::recvLoop() {
         return std::abs(ax - bx) + std::abs(ay - by);
     };
 
+    auto pruneEquipmentForInventory = [&](PlayerRuntime& p) {
+        for (auto it = p.data.equipment_by_type.begin(); it != p.data.equipment_by_type.end();) {
+            if (it->second < 0 || it->second >= static_cast<int>(p.data.inventory.size())) {
+                it = p.data.equipment_by_type.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+
+    auto onInventoryErase = [&](PlayerRuntime& p, int erased_index) {
+        for (auto it = p.data.equipment_by_type.begin(); it != p.data.equipment_by_type.end();) {
+            if (it->second == erased_index) {
+                it = p.data.equipment_by_type.erase(it);
+            } else {
+                if (it->second > erased_index) it->second -= 1;
+                ++it;
+            }
+        }
+    };
+
+    auto onInventorySwap = [&](PlayerRuntime& p, int a, int b) {
+        for (auto& [_, idx] : p.data.equipment_by_type) {
+            if (idx == a) idx = b;
+            else if (idx == b) idx = a;
+        }
+    };
+
     auto isItemReachableByPlayer = [&](const PlayerRuntime& p, const GroundItemRuntime& item) -> bool {
         if (item.room != p.data.room) return false;
         const int dx = std::abs(p.data.x - item.x);
@@ -376,7 +434,7 @@ void NetServer::recvLoop() {
                 std::cout << "[server] connect from ";
                 printPeerIp(ev.peer->address);
                 std::cout << "\n";
-                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, -1};
+                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, -1};
             }
 
             else if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -385,7 +443,7 @@ void NetServer::recvLoop() {
 
                     auto pit = players.find(ev.peer);
                     if (pit == players.end()) {
-                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, -1};
+                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, -1};
                         pit = players.find(ev.peer);
                     }
                     PlayerRuntime& player = pit->second;
@@ -423,7 +481,9 @@ void NetServer::recvLoop() {
 
                                 player.authenticated = true;
                                 player.data = std::move(persisted);
+                                pruneEquipmentForInventory(player);
                                 player.hp = player.max_hp;
+                                player.mana = player.max_mana;
                                 player.attack_target_monster_id = -1;
 
                                 std::cout << "[server] LOGIN user=" << player.data.username
@@ -542,8 +602,30 @@ void NetServer::recvLoop() {
                             std::string event = player.data.username + " has nothing to drop";
                             if (m.inventory_index >= 0 &&
                                 m.inventory_index < static_cast<int>(player.data.inventory.size())) {
+                                const Room* room = world_.getRoom(player.data.room);
+                                if (!room) break;
+
+                                int drop_x = player.data.x;
+                                int drop_y = player.data.y;
+                                if (m.to_x >= 0 && m.to_y >= 0) {
+                                    drop_x = m.to_x;
+                                    drop_y = m.to_y;
+                                }
+                                if (drop_x < 0 || drop_y < 0 ||
+                                    drop_x >= room->map_width() || drop_y >= room->map_height()) {
+                                    break;
+                                }
+                                if (!room->isWalkable(drop_x, drop_y)) break;
+                                if (occupiedByMonster(player.data.room, drop_x, drop_y) ||
+                                    occupiedByPlayer(ev.peer, player.data.room, drop_x, drop_y)) {
+                                    break;
+                                }
+                                const int throw_dist = tileDistance(player.data.x, player.data.y, drop_x, drop_y);
+                                if (throw_dist > 5) break;
+
                                 const std::string item_name = player.data.inventory[m.inventory_index];
                                 player.data.inventory.erase(player.data.inventory.begin() + m.inventory_index);
+                                onInventoryErase(player, m.inventory_index);
                                 std::string item_id = normalizeId(item_name);
                                 std::string sprite_tileset = "materials2.tsx";
                                 std::string sprite_name = item_id;
@@ -560,8 +642,8 @@ void NetServer::recvLoop() {
                                     sprite_tileset,
                                     sprite_name,
                                     player.data.room,
-                                    player.data.x,
-                                    player.data.y
+                                    drop_x,
+                                    drop_y
                                 });
 
                                 event = player.data.username + " dropped " + item_name;
@@ -579,9 +661,35 @@ void NetServer::recvLoop() {
                                 m.from_index < n && m.to_index < n &&
                                 m.from_index != m.to_index) {
                                 std::swap(player.data.inventory[m.from_index], player.data.inventory[m.to_index]);
+                                onInventorySwap(player, m.from_index, m.to_index);
                                 savePlayerNow(player);
                                 broadcastState(player.data.username + " rearranged inventory");
                             }
+                        } break;
+
+                        case MsgType::SetEquipment: {
+                            if (!player.authenticated) break;
+                            SetEquipmentMsg m = fromBytes<SetEquipmentMsg>(env.payload.data(), env.payload.size());
+                            const std::string equip_type = canonicalEquipType(m.equip_type);
+                            if (equip_type.empty()) break;
+
+                            if (m.inventory_index < 0) {
+                                player.data.equipment_by_type.erase(equip_type);
+                                savePlayerNow(player);
+                                broadcastState(player.data.username + " unequipped " + equip_type);
+                                break;
+                            }
+
+                            if (m.inventory_index >= static_cast<int>(player.data.inventory.size())) break;
+                            const std::string& inv_item_name = player.data.inventory[m.inventory_index];
+                            auto it = item_defs_by_id.find(normalizeId(inv_item_name));
+                            if (it == item_defs_by_id.end()) break;
+                            const std::string item_type = canonicalEquipType(it->second->item_type);
+                            if (item_type.empty() || item_type != equip_type) break;
+
+                            player.data.equipment_by_type[equip_type] = m.inventory_index;
+                            savePlayerNow(player);
+                            broadcastState(player.data.username + " equipped " + inv_item_name);
                         } break;
 
                         case MsgType::MoveGroundItem: {

@@ -8,6 +8,7 @@ struct ItemDef {
     std::string name;         // Display name.
     std::string sprite_tileset;
     std::string sprite_name;
+    std::string item_type;    // Weapon/Armor/Shield/Legs/Boots/Helmet
     bool stackable = false;
 };
 

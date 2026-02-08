@@ -74,6 +74,7 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
         if (key == "name") out.name = parseStringValue(raw_val);
         else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
         else if (key == "sprite_name") out.sprite_name = parseStringValue(raw_val);
+        else if (key == "item_type" || key == "equip_type" || key == "type" || key == "slot") out.item_type = parseStringValue(raw_val);
         else if (key == "stackable") {
             bool b = out.stackable;
             if (parseBool(raw_val, b)) out.stackable = b;

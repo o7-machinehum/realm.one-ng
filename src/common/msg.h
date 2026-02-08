@@ -22,6 +22,7 @@ enum class MsgType : uint16_t {
     Pickup,
     Drop,
     InventorySwap,
+    SetEquipment,
     MoveGroundItem,
     GameState
 };
@@ -87,10 +88,12 @@ struct PickupMsg {
 
 struct DropMsg {
     int inventory_index = -1;
+    int to_x = -1; // -1 means drop at player's current tile
+    int to_y = -1; // -1 means drop at player's current tile
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(inventory_index);
+        ar(inventory_index, to_x, to_y);
     }
 };
 
@@ -115,6 +118,27 @@ struct MoveGroundItemMsg {
     }
 };
 
+struct SetEquipmentMsg {
+    std::string equip_type; // Weapon/Armor/Shield/Legs/Boots/Helmet
+    int inventory_index = -1; // -1 means unequip this type
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(equip_type, inventory_index);
+    }
+};
+
+struct EquippedItemMsg {
+    std::string equip_type;
+    int inventory_index = -1;
+    std::string item_name;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(equip_type, inventory_index, item_name);
+    }
+};
+
 struct PlayerStateMsg {
     std::string user;
     std::string room;
@@ -123,10 +147,13 @@ struct PlayerStateMsg {
     int exp = 0;
     int hp = 0;
     int max_hp = 0;
+    int mana = 0;
+    int max_mana = 0;
+    std::vector<EquippedItemMsg> equipment;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(user, room, x, y, exp, hp, max_hp);
+        ar(user, room, x, y, exp, hp, max_hp, mana, max_mana, equipment);
     }
 };
 
@@ -172,6 +199,9 @@ struct GameStateMsg {
     int your_exp = 0;
     int your_hp = 0;
     int your_max_hp = 0;
+    int your_mana = 0;
+    int your_max_mana = 0;
+    std::vector<EquippedItemMsg> your_equipment;
     int attack_target_monster_id = -1;
     std::vector<std::string> inventory;
     std::vector<PlayerStateMsg> players;
@@ -181,8 +211,8 @@ struct GameStateMsg {
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(your_user, your_room, your_x, your_y, your_exp, your_hp, your_max_hp,
-           attack_target_monster_id, inventory, players, monsters, items, event_text);
+        ar(your_user, your_room, your_x, your_y, your_exp, your_hp, your_max_hp, your_mana, your_max_mana,
+           your_equipment, attack_target_monster_id, inventory, players, monsters, items, event_text);
     }
 };
 
@@ -196,6 +226,7 @@ using Message = std::variant<
     PickupMsg,
     DropMsg,
     InventorySwapMsg,
+    SetEquipmentMsg,
     MoveGroundItemMsg,
     GameStateMsg
 >;

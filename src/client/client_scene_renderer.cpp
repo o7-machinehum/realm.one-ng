@@ -79,6 +79,7 @@ void drawScene(const Room& room,
                SceneOutput& out) {
     out.attack_click.reset();
     out.move_ground_item.reset();
+    out.pickup_ground_item.reset();
     scene_state.attack_fx_t += dt;
 
     const float tile_w = room.tile_width() * cfg.map_scale;
@@ -210,9 +211,14 @@ void drawScene(const Room& room,
     };
 
     const Vector2 mouse = GetMousePosition();
+    const float inv_panel_x = static_cast<float>(GetScreenWidth()) - cfg.inventory_panel_width;
+    const bool mouse_in_inventory = cfg.inventory_visible &&
+                                    mouse.x >= inv_panel_x &&
+                                    mouse.y >= 0.0f &&
+                                    mouse.y < (GetScreenHeight() - cfg.bottom_panel_height);
     const bool mouse_in_map = mouse.x >= 0.0f &&
                               mouse.y >= 0.0f &&
-                              mouse.x < (GetScreenWidth() - cfg.inventory_panel_width) &&
+                              mouse.x < (cfg.inventory_visible ? inv_panel_x : static_cast<float>(GetScreenWidth())) &&
                               mouse.y < (GetScreenHeight() - cfg.bottom_panel_height);
     const int hovered_item_id = mouse_in_map ? findTopItemAt(mouse) : -1;
 
@@ -224,6 +230,8 @@ void drawScene(const Room& room,
             const int tx = static_cast<int>(std::floor(mouse.x / tile_w));
             const int ty = static_cast<int>(std::floor(mouse.y / tile_h));
             out.move_ground_item = MoveGroundItemMsg{scene_state.dragging_ground_item_id, tx, ty};
+        } else if (mouse_in_inventory) {
+            out.pickup_ground_item = PickupMsg{scene_state.dragging_ground_item_id};
         }
         scene_state.dragging_ground_item_id = -1;
     }
@@ -336,7 +344,7 @@ void drawScene(const Room& room,
     }
 
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-        if (mouse.x < GetScreenWidth() - cfg.inventory_panel_width) {
+        if (mouse.x < (cfg.inventory_visible ? inv_panel_x : static_cast<float>(GetScreenWidth()))) {
             int target = -1;
             for (auto it = monster_click_boxes.rbegin(); it != monster_click_boxes.rend(); ++it) {
                 if (CheckCollisionPointRec(mouse, it->second)) {
@@ -348,19 +356,28 @@ void drawScene(const Room& room,
         }
     }
 
+    const float bar_x = 10.0f;
+    const float bar_y = 10.0f;
+    const float bar_w = 220.0f;
+    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y), static_cast<int>(bar_w), 16, Color{35, 20, 20, 210});
+    drawHealthBar(bar_x, bar_y + 5.0f, bar_w, game_state.your_hp, game_state.your_max_hp);
+    drawUiText(ui_font, TextFormat("HP %d/%d", game_state.your_hp, game_state.your_max_hp), bar_x + 6.0f, bar_y + 1.0f, 11, RAYWHITE);
+    DrawRectangle(static_cast<int>(bar_x), static_cast<int>(bar_y + 20.0f), static_cast<int>(bar_w), 16, Color{18, 24, 46, 220});
+    DrawRectangle(static_cast<int>(bar_x + 1.0f), static_cast<int>(bar_y + 21.0f),
+                  static_cast<int>((bar_w - 2.0f) * (game_state.your_max_mana > 0 ? (static_cast<float>(game_state.your_mana) / game_state.your_max_mana) : 0.0f)),
+                  14, Color{74, 128, 220, 255});
+    drawUiText(ui_font, TextFormat("MP %d/%d", game_state.your_mana, game_state.your_max_mana), bar_x + 6.0f, bar_y + 21.0f, 11, RAYWHITE);
     drawUiText(ui_font,
-               TextFormat("User: %s  Room: %s  Pos: (%d,%d)  HP: %d/%d  Exp: %d",
+               TextFormat("%s  %s  (%d,%d)  Exp:%d",
                           game_state.your_user.c_str(),
                           game_state.your_room.c_str(),
                           game_state.your_x,
                           game_state.your_y,
-                          game_state.your_hp,
-                          game_state.your_max_hp,
                           game_state.your_exp),
-               10,
-               10,
-               17,
-               WHITE);
+               bar_x + bar_w + 12.0f,
+               bar_y + 7.0f,
+               13,
+               RAYWHITE);
 }
 
 } // namespace client
