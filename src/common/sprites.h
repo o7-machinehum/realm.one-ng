@@ -9,7 +9,7 @@
 #include "raylib.h" // Rectangle
 
 enum class Dir : unsigned char { N, E, S, W };
-enum class ClipKind : unsigned char { Move, Action };
+enum class ClipKind : unsigned char { Move, Action, Death };
 
 class Frame {
 public:
@@ -60,7 +60,7 @@ public:
     void debug_dump() const;
 
 private:
-    struct SpriteClips { Clip n, e, s, w; Clip an, ae, as, aw; };
+    struct SpriteClips { Clip n, e, s, w; Clip an, ae, as, aw; Clip d; };
 
     static Clip& clip(SpriteClips& sc, Dir d, ClipKind kind);
     static const Clip* clip(const SpriteClips& sc, Dir d, ClipKind kind);

@@ -196,13 +196,16 @@ struct GroundItemStateMsg {
     std::string name;
     std::string sprite_tileset;
     std::string sprite_name;
+    int sprite_w_tiles = 1;
+    int sprite_h_tiles = 1;
+    int sprite_clip = 0; // 0=Move, 1=Death
     std::string room;
     int x = 0;
     int y = 0;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(id, name, sprite_tileset, sprite_name, room, x, y);
+        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, sprite_clip, room, x, y);
     }
 };
 

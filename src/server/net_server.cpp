@@ -18,6 +18,7 @@ namespace {
 
 struct MonsterRuntime {
     int id = 0;
+    std::string def_id;
     std::string name;
     std::string sprite_tileset;
     std::string sprite_name;
@@ -42,6 +43,9 @@ struct GroundItemRuntime {
     std::string name;
     std::string sprite_tileset;
     std::string sprite_name;
+    int sprite_w_tiles = 1;
+    int sprite_h_tiles = 1;
+    int sprite_clip = 0; // 0=Move, 1=Death
     std::string room;
     int x = 0;
     int y = 0;
@@ -100,6 +104,19 @@ std::string normalizeId(std::string s) {
         return static_cast<char>(std::tolower(c));
     });
     return s;
+}
+
+constexpr const char* kCorpsePrefix = "corpse:";
+
+std::string makeCorpseItemId(const std::string& monster_id) {
+    return std::string(kCorpsePrefix) + normalizeId(monster_id);
+}
+
+std::string parseCorpseMonsterId(const std::string& item_id) {
+    const std::string n = normalizeId(item_id);
+    const std::string prefix = kCorpsePrefix;
+    if (n.rfind(prefix, 0) != 0) return {};
+    return n.substr(prefix.size());
 }
 
 std::vector<EquippedItemMsg> toEquippedMsgVec(const std::unordered_map<std::string, int>& eq,
@@ -162,7 +179,11 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
 
     for (const auto& i : items) {
         if (i.room != self.data.room) continue;
-        gs.items.push_back(GroundItemStateMsg{i.id, i.name, i.sprite_tileset, i.sprite_name, i.room, i.x, i.y});
+        gs.items.push_back(GroundItemStateMsg{
+            i.id, i.name, i.sprite_tileset, i.sprite_name,
+            i.sprite_w_tiles, i.sprite_h_tiles, i.sprite_clip,
+            i.room, i.x, i.y
+        });
     }
 
     return gs;
@@ -225,6 +246,9 @@ void NetServer::recvLoop() {
             def.name,
             def.sprite_tileset,
             def.id,
+            1,
+            1,
+            0,
             room_name,
             x,
             y
@@ -275,9 +299,10 @@ void NetServer::recvLoop() {
 
             monsters.push_back(MonsterRuntime{
                 next_monster_id++,
+                def.id,
                 spawn.name_override.empty() ? def.name : spawn.name_override,
                 def.sprite_tileset,
-                def.sprite_name,
+                def.id,
                 room_name,
                 spawn.x,
                 spawn.y,
@@ -621,9 +646,13 @@ void NetServer::recvLoop() {
 
                             const int idx = findPickupCandidateIndex(player, m.item_id);
 
-                            std::string event = player.data.username + " found no item";
+                std::string event = player.data.username + " found no item";
                             if (idx >= 0) {
-                                player.data.inventory.push_back(items[idx].name);
+                                if (parseCorpseMonsterId(items[idx].item_id).empty()) {
+                                    player.data.inventory.push_back(items[idx].name);
+                                } else {
+                                    player.data.inventory.push_back(items[idx].item_id);
+                                }
                                 event = player.data.username + " picked up " + items[idx].name;
                                 items.erase(items.begin() + idx);
                                 savePlayerNow(player);
@@ -660,30 +689,51 @@ void NetServer::recvLoop() {
                                 const int throw_dist = tileDistance(player.data.x, player.data.y, drop_x, drop_y);
                                 if (throw_dist > 5) break;
 
-                                const std::string item_name = player.data.inventory[m.inventory_index];
+                                const std::string inv_entry = player.data.inventory[m.inventory_index];
+                                GroundItemRuntime drop_item{};
+                                drop_item.id = next_item_id++;
+                                drop_item.room = player.data.room;
+                                drop_item.x = drop_x;
+                                drop_item.y = drop_y;
+
+                                const std::string corpse_monster_id = parseCorpseMonsterId(inv_entry);
+                                bool can_drop = false;
+                                if (!corpse_monster_id.empty()) {
+                                    auto dit = defs_by_id.find(corpse_monster_id);
+                                    if (dit != defs_by_id.end()) {
+                                        const MonsterDef& def = *dit->second;
+                                        drop_item.item_id = makeCorpseItemId(def.id);
+                                        drop_item.name = def.name + " corpse";
+                                        drop_item.sprite_tileset = def.sprite_tileset;
+                                        drop_item.sprite_name = def.id;
+                                        drop_item.sprite_w_tiles = std::max(1, def.monster_size_w);
+                                        drop_item.sprite_h_tiles = std::max(1, def.monster_size_h);
+                                        drop_item.sprite_clip = 1;
+                                        can_drop = true;
+                                    }
+                                } else {
+                                    const std::string item_name = inv_entry;
+                                    std::string item_id = normalizeId(item_name);
+                                    drop_item.item_id = item_id;
+                                    drop_item.name = item_name;
+                                    drop_item.sprite_tileset = "materials2.tsx";
+                                    drop_item.sprite_name = item_id;
+                                    auto def_it = item_defs_by_id.find(item_id);
+                                    if (def_it != item_defs_by_id.end()) {
+                                        drop_item.item_id = def_it->second->id;
+                                        drop_item.name = item_name;
+                                        drop_item.sprite_tileset = def_it->second->sprite_tileset;
+                                        drop_item.sprite_name = def_it->second->id;
+                                    }
+                                    can_drop = true;
+                                }
+                                if (!can_drop) break;
+
                                 player.data.inventory.erase(player.data.inventory.begin() + m.inventory_index);
                                 onInventoryErase(player, m.inventory_index);
-                                std::string item_id = normalizeId(item_name);
-                                std::string sprite_tileset = "materials2.tsx";
-                                std::string sprite_name = item_id;
-                                auto def_it = item_defs_by_id.find(item_id);
-                                if (def_it != item_defs_by_id.end()) {
-                                    item_id = def_it->second->id;
-                                    sprite_tileset = def_it->second->sprite_tileset;
-                                    sprite_name = def_it->second->id;
-                                }
-                                items.push_back(GroundItemRuntime{
-                                    next_item_id++,
-                                    item_id,
-                                    item_name,
-                                    sprite_tileset,
-                                    sprite_name,
-                                    player.data.room,
-                                    drop_x,
-                                    drop_y
-                                });
+                                items.push_back(std::move(drop_item));
 
-                                event = player.data.username + " dropped " + item_name;
+                                event = player.data.username + " dropped " + items.back().name;
                                 savePlayerNow(player);
                             }
 
@@ -837,6 +887,19 @@ void NetServer::recvLoop() {
                 if (mon.hp <= 0) {
                     p.data.exp += mon.exp_reward;
                     p.attack_target_monster_id = -1;
+                    items.push_back(GroundItemRuntime{
+                        next_item_id++,
+                        makeCorpseItemId(mon.def_id.empty() ? mon.name : mon.def_id),
+                        mon.name + " corpse",
+                        mon.sprite_tileset,
+                        mon.sprite_name,
+                        std::max(1, mon.size_w),
+                        std::max(1, mon.size_h),
+                        1,
+                        mon.room,
+                        mon.x,
+                        mon.y
+                    });
                     for (const auto& drop : mon.drops) {
                         if (drop.item_id.empty()) continue;
                         if (!rollChance(drop.chance)) continue;

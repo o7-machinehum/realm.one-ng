@@ -99,7 +99,7 @@
         "art/properties.tsx"
     ],
     "project": "main.tiled-project",
-    "property.type": "bool",
+    "property.type": "string",
     "recentFiles": [
         "/home/machinehum/the_island/data/rooms/n1_1.tmx",
         "art/character.tsx",

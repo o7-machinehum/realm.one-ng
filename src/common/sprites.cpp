@@ -21,7 +21,9 @@ std::string toLower(std::string s) {
 // -----------------------------
 
 Clip& Sprites::clip(SpriteClips& sc, Dir d, ClipKind kind) {
-    if (kind == ClipKind::Action) {
+    if (kind == ClipKind::Death) {
+        return sc.d;
+    } else if (kind == ClipKind::Action) {
         switch (d) {
             case Dir::N: return sc.an;
             case Dir::E: return sc.ae;
@@ -41,7 +43,9 @@ Clip& Sprites::clip(SpriteClips& sc, Dir d, ClipKind kind) {
 }
 
 const Clip* Sprites::clip(const SpriteClips& sc, Dir d, ClipKind kind) {
-    if (kind == ClipKind::Action) {
+    if (kind == ClipKind::Death) {
+        return &sc.d;
+    } else if (kind == ClipKind::Action) {
         switch (d) {
             case Dir::N: return &sc.an;
             case Dir::E: return &sc.ae;
@@ -120,8 +124,8 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
     };
     std::unordered_map<std::string, Anchor> anchors;
 
-    // Collect sprite anchors from tile properties. An anchor tile is the bottom-left
-    // of the 4-direction block (S/E/N/W top->bottom), each direction extending right.
+    // Collect sprite anchors from tile properties. An anchor tile is the top-left
+    // of the full movement+action block.
     for (XMLElement* tile = tileset->FirstChildElement("tile");
          tile;
          tile = tile->NextSiblingElement("tile"))
@@ -145,7 +149,7 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
             const char* pval = p->Attribute("value");
 
-            if ((std::strcmp(pname, "name") == 0 || std::strcmp(pname, "monster_name") == 0) && pval) {
+            if (std::strcmp(pname, "name") == 0 && pval) {
                 sprite_name = pval;
             }
         }
@@ -156,7 +160,7 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
         int col = id % columns_;
         int row = id / columns_;
         Anchor& a = anchors[sprite_name];
-        if (a.id < 0 || row > a.row || (row == a.row && col < a.col)) {
+        if (a.id < 0 || row < a.row || (row == a.row && col < a.col)) {
             a.id = id;
             a.row = row;
             a.col = col;
@@ -180,9 +184,8 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
         const int action_w_tiles = size_w_tiles * 2;
         const int action_frame_w = action_w_tiles * tile_w_;
         constexpr int frames_per_dir = 4;
-        const bool full_block_anchor =
-            (anchor.row >= (4 * size_h_tiles)) &&
-            (anchor.row - ((8 * size_h_tiles) - 1) >= 0);
+        const int block_top_row = anchor.row;
+        const int block_left_col = anchor.col;
 
         // Direction rows from top to bottom: S, E, N, W.
         struct DirRow { Dir dir; int dir_idx; };
@@ -192,15 +195,13 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
         SpriteClips& sc = sprites_[name];
         for (const auto& dr : rows) {
-            const int move_bottom_row = full_block_anchor
-                ? (anchor.row - ((7 - dr.dir_idx) * size_h_tiles))
-                : (anchor.row - ((3 - dr.dir_idx) * size_h_tiles));
-            const int move_top_row = move_bottom_row - (size_h_tiles - 1);
+            const int move_top_row = block_top_row + (dr.dir_idx * size_h_tiles);
+            const int move_bottom_row = move_top_row + (size_h_tiles - 1);
             if (move_top_row < 0 || move_top_row >= total_rows) continue;
             if (move_top_row + size_h_tiles > total_rows) continue;
 
             for (int frame_idx = 0; frame_idx < frames_per_dir; ++frame_idx) {
-                const int col_left = anchor.col + frame_idx * size_w_tiles;
+                const int col_left = block_left_col + frame_idx * size_w_tiles;
                 if (col_left < 0) continue;
                 if (col_left + size_w_tiles > columns_) break;
 
@@ -212,14 +213,12 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
             // Optional action strips are in the lower half, same row ordering,
             // but each frame is twice as wide on X.
-            const int action_bottom_row = full_block_anchor
-                ? (anchor.row - ((3 - dr.dir_idx) * size_h_tiles))
-                : (move_bottom_row + (4 * size_h_tiles));
-            const int action_top_row = action_bottom_row - (size_h_tiles - 1);
+            const int action_top_row = block_top_row + ((4 + dr.dir_idx) * size_h_tiles);
+            const int action_bottom_row = action_top_row + (size_h_tiles - 1);
             if (action_top_row < 0 || action_top_row >= total_rows) continue;
             if (action_top_row + size_h_tiles > total_rows) continue;
             for (int frame_idx = 0; frame_idx < frames_per_dir; ++frame_idx) {
-                const int action_col_left = anchor.col + frame_idx * action_w_tiles;
+                const int action_col_left = block_left_col + frame_idx * action_w_tiles;
                 if (action_col_left < 0) continue;
                 if (action_col_left + action_w_tiles > columns_) break;
 
@@ -228,6 +227,29 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
                 const int pseudo_tile_id = action_bottom_row * columns_ + action_col_left;
                 clip(sc, dr.dir, ClipKind::Action).frames.emplace_back(pseudo_tile_id, frame_idx, src_x, src_y, action_frame_w, frame_h);
             }
+        }
+
+        // Optional death block. Layout rule:
+        // - starts one movement-frame width to the right of South frame #4
+        // - starts (H-1) tiles lower than South frame #4 top
+        // - dimensions are inverse: (H x W) tiles
+        const int south_move_top_row = block_top_row;
+        const int south_last_col_left = block_left_col + (frames_per_dir - 1) * size_w_tiles;
+        const int death_col_left = south_last_col_left + size_w_tiles;
+        const int death_top_row = south_move_top_row + (size_h_tiles - 1);
+        const int death_w_tiles = size_h_tiles;
+        const int death_h_tiles = size_w_tiles;
+        if (death_col_left >= 0 &&
+            death_col_left + death_w_tiles <= columns_ &&
+            death_top_row >= 0 &&
+            death_top_row + death_h_tiles <= total_rows) {
+            const int src_x = death_col_left * tile_w_;
+            const int src_y = death_top_row * tile_h_;
+            const int death_bottom_row = death_top_row + death_h_tiles - 1;
+            const int pseudo_tile_id = death_bottom_row * columns_ + death_col_left;
+            clip(sc, Dir::S, ClipKind::Death)
+                .frames.emplace_back(pseudo_tile_id, 0, src_x, src_y,
+                                     death_w_tiles * tile_w_, death_h_tiles * tile_h_);
         }
 
         // If a sheet does not provide all 4 directional strips yet, reuse any
@@ -255,6 +277,7 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
         sort_clip(kv.second.ae);
         sort_clip(kv.second.as);
         sort_clip(kv.second.aw);
+        sort_clip(kv.second.d);
     }
 
     return true;

@@ -124,7 +124,6 @@ bool parseTomlSubsetFile(const fs::path& p, MonsterDef& out) {
 
         if (key == "name") out.name = parseStringValue(raw_val);
         else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
-        else if (key == "sprite_name") out.sprite_name = parseStringValue(raw_val);
         else if (key == "monster_size" || key == "size") {
             int w = out.monster_size_w;
             int h = out.monster_size_h;
@@ -148,7 +147,6 @@ MonsterDef fallbackDefFromId(const std::string& id) {
     d.id = id;
     d.name = id;
     d.sprite_tileset = "character.tsx";
-    d.sprite_name = "player_1";
     return d;
 }
 
@@ -171,7 +169,6 @@ std::vector<MonsterDef> loadMonsterDefs(const std::string& dir_path) {
 
         if (d.name.empty()) d.name = d.id;
         if (d.sprite_tileset.empty()) d.sprite_tileset = "character.tsx";
-        if (d.sprite_name.empty()) d.sprite_name = "player_1";
 
         defs.push_back(std::move(d));
     }

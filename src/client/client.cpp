@@ -4,6 +4,7 @@
 #include "client_inventory_ui.h"
 #include "client_scene_renderer.h"
 #include "msg.h"
+#include "monster_defs.h"
 #include "net_client.h"
 #include "room.h"
 #include "room_render.h"
@@ -89,6 +90,15 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
     }
     return out;
 }
+
+constexpr const char* kCorpsePrefix = "corpse:";
+
+std::string parseCorpseMonsterId(const std::string& raw) {
+    const std::string n = toLower(trim(raw));
+    const std::string prefix = kCorpsePrefix;
+    if (n.rfind(prefix, 0) != 0) return {};
+    return n.substr(prefix.size());
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -129,6 +139,7 @@ int main(int argc, char** argv) {
     std::unordered_map<std::string, SpriteSheetCacheEntry> monster_sheet_cache;
     std::unordered_map<std::string, SpriteSheetCacheEntry> item_sheet_cache;
     std::unordered_map<std::string, ItemUiDef> item_defs_by_key;
+    std::unordered_map<std::string, MonsterDef> monster_defs_by_id;
     float move_repeat_timer = 0.0f;
     bool move_repeat_started = false;
     float rotate_repeat_timer = 0.0f;
@@ -140,6 +151,9 @@ int main(int argc, char** argv) {
     for (const auto& def : loadClientItemDefs("game/items")) {
         item_defs_by_key[toLower(def.id)] = def;
         item_defs_by_key[toLower(def.name)] = def;
+    }
+    for (const auto& def : loadMonsterDefs("game/monsters")) {
+        monster_defs_by_id[toLower(def.id)] = def;
     }
 
     client::pushBounded(logs, "Type /login <user> <pass>.");
@@ -299,7 +313,10 @@ int main(int argc, char** argv) {
                 if (i.sprite_tileset.empty() || i.sprite_name.empty()) continue;
                 auto& entry = item_sheet_cache[i.sprite_tileset];
                 const std::string size_key = toLower(i.sprite_name);
-                const std::pair<int, int> size_val{1, 1};
+                const std::pair<int, int> size_val{
+                    std::max(1, i.sprite_w_tiles),
+                    std::max(1, i.sprite_h_tiles)
+                };
                 bool needs_reload = !entry.ready;
                 auto sit = entry.size_overrides.find(size_key);
                 if (sit == entry.size_overrides.end() || sit->second != size_val) {
@@ -323,11 +340,28 @@ int main(int argc, char** argv) {
             }
             for (const auto& inv_item : game_state->inventory) {
                 auto dit = item_defs_by_key.find(toLower(inv_item));
-                if (dit == item_defs_by_key.end()) continue;
-                const auto& def = dit->second;
-                auto& entry = item_sheet_cache[def.sprite_tileset];
-                const std::string size_key = toLower(def.id);
-                const std::pair<int, int> size_val{1, 1};
+                std::string tsx;
+                std::string size_key;
+                std::pair<int, int> size_val{1, 1};
+
+                if (dit != item_defs_by_key.end()) {
+                    const auto& def = dit->second;
+                    tsx = def.sprite_tileset;
+                    size_key = toLower(def.id);
+                } else {
+                    const std::string corpse_id = parseCorpseMonsterId(inv_item);
+                    if (corpse_id.empty()) continue;
+                    auto mit = monster_defs_by_id.find(corpse_id);
+                    if (mit == monster_defs_by_id.end()) continue;
+                    tsx = mit->second.sprite_tileset;
+                    size_key = toLower(mit->second.id);
+                    size_val = {
+                        std::max(1, mit->second.monster_size_w),
+                        std::max(1, mit->second.monster_size_h)
+                    };
+                }
+
+                auto& entry = item_sheet_cache[tsx];
                 bool needs_reload = !entry.ready;
                 auto sit = entry.size_overrides.find(size_key);
                 if (sit == entry.size_overrides.end() || sit->second != size_val) {
@@ -340,7 +374,7 @@ int main(int argc, char** argv) {
                     UnloadTexture(entry.tex);
                     entry.tex = Texture2D{};
                 }
-                const std::string tsx_path = "game/assets/art/" + def.sprite_tileset;
+                const std::string tsx_path = "game/assets/art/" + tsx;
                 if (entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
                     const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
                     entry.tex = LoadTexture(tex_path.c_str());
@@ -436,13 +470,29 @@ int main(int argc, char** argv) {
             client::InventoryUiOutput inv_out{};
             const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect) -> bool {
                 auto dit = item_defs_by_key.find(toLower(item_name));
-                if (dit == item_defs_by_key.end()) return false;
-                const auto& def = dit->second;
-                auto it = item_sheet_cache.find(def.sprite_tileset);
+                std::string tsx;
+                std::string sprite_name;
+                ClipKind kind = ClipKind::Move;
+                if (dit != item_defs_by_key.end()) {
+                    const auto& def = dit->second;
+                    tsx = def.sprite_tileset;
+                    sprite_name = def.id;
+                } else {
+                    const std::string corpse_id = parseCorpseMonsterId(item_name);
+                    if (corpse_id.empty()) return false;
+                    auto mit = monster_defs_by_id.find(corpse_id);
+                    if (mit == monster_defs_by_id.end()) return false;
+                    tsx = mit->second.sprite_tileset;
+                    sprite_name = mit->second.id;
+                    kind = ClipKind::Death;
+                }
+                auto it = item_sheet_cache.find(tsx);
                 if (it == item_sheet_cache.end()) return false;
                 if (!it->second.ready) return false;
-                const Frame* fr = it->second.sprites.frame(def.id, Dir::W, 0);
-                if (!fr) fr = it->second.sprites.frame(def.id, Dir::S, 0);
+                const Frame* fr = it->second.sprites.frame(sprite_name, Dir::S, 0, kind);
+                if (!fr && kind == ClipKind::Death) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
+                if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::W, 0, ClipKind::Move);
+                if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
                 if (!fr) return false;
                 const Rectangle src = fr->rect();
                 const float scale = std::min(icon_rect.width / src.width, icon_rect.height / src.height);

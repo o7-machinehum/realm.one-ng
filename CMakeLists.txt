@@ -36,6 +36,7 @@ add_executable(client
     src/client/client_scene_renderer.cpp
     src/client/client_inventory_ui.cpp
     src/client/net_client.cpp
+    src/server/monster_defs.cpp
 )
 
 target_link_libraries(client PRIVATE
@@ -48,6 +49,7 @@ target_include_directories(client PRIVATE
     ${ENET_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
 
 # ----- Server

@@ -9,19 +9,17 @@ Each monster template is one `.toml` file in this folder.
 
 ## Sprite Connection
 
-Use two fields:
+Use one field:
 
 - `sprite_tileset`: TSX filename under `game/assets/art` (example: `character.tsx`)
-- `sprite_name`: logical sprite clip name in that TSX (the tile `name` property consumed by `Sprites`)
-
-This keeps data stable if tile ids move around in Tiled.
+- sprite clip key is always monster id (the TOML filename stem, e.g. `rat.toml` -> `rat`)
 
 ## Spawn Flow (Tiled -> TOML -> Game)
 
 1. In a room `.tmx`, create a tile layer named `Monsters`.
 2. Paint tiles on that layer where monsters should spawn.
-3. Those tiles must come from a TSX tile that has property `monster_name`.
-   Example: `monster_name = "rat"` resolves to `game/monsters/rat.toml`.
+3. Those tiles must come from a TSX tile that has property `name`.
+   Example: `name = "rat"` resolves to `game/monsters/rat.toml`.
 4. The painted tile is treated as the monster anchor tile (bottom-left).
 
 The server reads the `Monsters` layer and instantiates runtime monsters from the matched TOML template.

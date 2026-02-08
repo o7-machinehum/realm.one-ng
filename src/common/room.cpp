@@ -229,13 +229,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         r.source_tsx = std::filesystem::path(src).filename().string();;
         tilesets_.push_back(std::move(r));
         ts_walk_props.push_back(loadWalkableTileProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx));
-        auto mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_name");
-        if (mon_props.empty()) {
-            mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_id");
-        }
-        if (mon_props.empty()) {
-            mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster");
-        }
+        auto mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "name");
         ts_monster_props.push_back(std::move(mon_props));
         auto item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item_name");
         if (item_props.empty()) {

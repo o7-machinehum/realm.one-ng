@@ -3,9 +3,8 @@ name = "Rat"
 
 # Sprite linkage:
 # - sprite_tileset points to game/assets/art/<file>
-# - sprite_name must match the tile property "name" used by Sprites loader
+# - sprite clip key is the monster id from filename ("rat")
 sprite_tileset = "npc_test.tsx"
-sprite_name = "Rat"
 monster_size = "1x2"
 
 max_hp = 30

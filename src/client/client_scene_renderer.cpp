@@ -153,6 +153,10 @@ void drawScene(const Room& room,
         });
     }
 
+    const auto itemClipKind = [](const GroundItemStateMsg& item) {
+        return (item.sprite_clip == 1) ? ClipKind::Death : ClipKind::Move;
+    };
+
     for (const auto& m : game_state.monsters) {
         SpriteSheetView sheet_view{};
         if (monster_sheet_view) sheet_view = monster_sheet_view(m.sprite_tileset);
@@ -281,12 +285,14 @@ void drawScene(const Room& room,
     for (const auto& itv : ground_items) {
         if (itv.msg->id == scene_state.dragging_ground_item_id) continue;
         if (itv.ready && itv.sprites) {
-            const Frame* fr = itv.sprites->frame(itv.msg->sprite_name, Dir::W, 0);
-            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0);
+            const ClipKind kind = itemClipKind(*itv.msg);
+            const Frame* fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, kind);
+            if (!fr && kind == ClipKind::Death) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, ClipKind::Move);
+            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::W, 0, ClipKind::Move);
+            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, ClipKind::Move);
             if (fr) {
                 const Rectangle src = fr->rect();
                 Rectangle dst{itv.tile_box.x, itv.tile_box.y, src.width * cfg.map_scale, src.height * cfg.map_scale};
-                dst.x += (tile_w - dst.width) * 0.5f;
                 dst.y += tile_h - dst.height;
                 DrawTexturePro(itv.tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
             } else {
@@ -311,7 +317,7 @@ void drawScene(const Room& room,
             const auto& mv = monster_visuals[cmd.idx];
             const auto& m = *mv.msg;
             if (mv.ready) {
-                drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, PINK);
+                drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
             } else {
                 const float x = mv.rx * tile_w + tile_w * 0.5f;
                 const float y = mv.ry * tile_h + tile_h * 0.5f;
@@ -342,8 +348,11 @@ void drawScene(const Room& room,
         }
         if (drag_item) {
             if (drag_item->ready && drag_item->sprites) {
-                const Frame* fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::W, 0);
-                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0);
+                const ClipKind kind = itemClipKind(*drag_item->msg);
+                const Frame* fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, kind);
+                if (!fr && kind == ClipKind::Death) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, ClipKind::Move);
+                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::W, 0, ClipKind::Move);
+                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, ClipKind::Move);
                 if (fr) {
                     const Rectangle src = fr->rect();
                     Rectangle dst{mouse.x - (src.width * cfg.map_scale * 0.5f),
@@ -360,10 +369,10 @@ void drawScene(const Room& room,
 
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
-        drawHealthBar(mv.click_box.x, mv.click_box.y - 8, mv.click_box.width, m.hp, m.max_hp);
-        const float x = mv.rx * tile_w + tile_w * 0.5f;
-        const float y = mv.ry * tile_h + tile_h * 0.5f;
-        drawUiText(ui_font, m.name, x + 12, y - 12, 13, ORANGE);
+        const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 8.0f;
+        drawHealthBar(mv.click_box.x, bar_y, mv.click_box.width, m.hp, m.max_hp);
+        const float name_w = MeasureTextEx(ui_font, m.name.c_str(), 13.0f, 1.0f).x;
+        drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - 14.0f, 13, ORANGE);
     }
 
     for (const auto& pv : player_visuals) {
