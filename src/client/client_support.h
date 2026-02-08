@@ -16,6 +16,7 @@ struct AnimationComponent {
     float timer = 0.0f;
     float frame_time = 0.14f;
     float moving_timer = 0.0f;
+    bool action_playing = false;
 };
 
 struct DragState {
@@ -33,7 +34,7 @@ bool tryParseMove(const std::string& input, MoveMsg& out);
 bool tryParseAttack(const std::string& input, AttackMsg& out);
 
 Dir dirFromDelta(int dx, int dy, Dir fallback);
-void tickAnimation(AnimationComponent& anim, const Sprites& sprites, bool movement_pulse, float dt);
+void tickAnimation(AnimationComponent& anim, const Sprites& sprites, bool movement_pulse, bool action_active, float dt);
 
 void drawActor(const Sprites& sprites,
                Texture2D tex,

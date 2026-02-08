@@ -131,6 +131,8 @@ int main(int argc, char** argv) {
     std::unordered_map<std::string, ItemUiDef> item_defs_by_key;
     float move_repeat_timer = 0.0f;
     bool move_repeat_started = false;
+    float rotate_repeat_timer = 0.0f;
+    bool rotate_repeat_started = false;
 
     const client::SceneConfig scene_cfg{};
     const client::InventoryUiConfig inventory_cfg{};
@@ -194,18 +196,37 @@ int main(int argc, char** argv) {
 
             const bool moving = (mx != 0 || my != 0);
             const float dt = GetFrameTime();
+            const bool rotating_only = moving && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
             if (!moving) {
                 move_repeat_timer = 0.0f;
                 move_repeat_started = false;
+                rotate_repeat_timer = 0.0f;
+                rotate_repeat_started = false;
             } else {
-                move_repeat_timer -= dt;
-                if (!move_repeat_started) {
-                    mailbox.push(MsgType::Move, MoveMsg{mx, my});
-                    move_repeat_started = true;
-                    move_repeat_timer = 0.20f;
-                } else if (move_repeat_timer <= 0.0f) {
-                    mailbox.push(MsgType::Move, MoveMsg{mx, my});
-                    move_repeat_timer = 0.085f;
+                if (rotating_only) {
+                    move_repeat_timer = 0.0f;
+                    move_repeat_started = false;
+                    rotate_repeat_timer -= dt;
+                    if (!rotate_repeat_started) {
+                        mailbox.push(MsgType::Rotate, RotateMsg{mx, my});
+                        rotate_repeat_started = true;
+                        rotate_repeat_timer = 0.18f;
+                    } else if (rotate_repeat_timer <= 0.0f) {
+                        mailbox.push(MsgType::Rotate, RotateMsg{mx, my});
+                        rotate_repeat_timer = 0.085f;
+                    }
+                } else {
+                    rotate_repeat_timer = 0.0f;
+                    rotate_repeat_started = false;
+                    move_repeat_timer -= dt;
+                    if (!move_repeat_started) {
+                        mailbox.push(MsgType::Move, MoveMsg{mx, my});
+                        move_repeat_started = true;
+                        move_repeat_timer = 0.20f;
+                    } else if (move_repeat_timer <= 0.0f) {
+                        mailbox.push(MsgType::Move, MoveMsg{mx, my});
+                        move_repeat_timer = 0.085f;
+                    }
                 }
             }
 
@@ -228,6 +249,8 @@ int main(int argc, char** argv) {
             scene_state.prev_pos_by_key.clear();
             scene_state.render_pos_by_key.clear();
             scene_state.anim_by_key.clear();
+            scene_state.last_attack_seq_by_key.clear();
+            scene_state.attack_fx_timer_by_key.clear();
             scene_state.dragging_ground_item_id = -1;
         }
 
@@ -238,6 +261,8 @@ int main(int argc, char** argv) {
                 scene_state.prev_pos_by_key.clear();
                 scene_state.render_pos_by_key.clear();
                 scene_state.anim_by_key.clear();
+                scene_state.last_attack_seq_by_key.clear();
+                scene_state.attack_fx_timer_by_key.clear();
                 scene_state.dragging_ground_item_id = -1;
             }
             last_game_state_room = game_state->your_room;

@@ -65,12 +65,27 @@ Dir dirFromDelta(int dx, int dy, Dir fallback) {
     return fallback;
 }
 
-void tickAnimation(AnimationComponent& anim, const Sprites& sprites, bool movement_pulse, float dt) {
-    const int count = sprites.frame_count(anim.sprite_name, anim.dir);
+void tickAnimation(AnimationComponent& anim, const Sprites& sprites, bool movement_pulse, bool action_active, float dt) {
+    const int action_count = sprites.frame_count(anim.sprite_name, anim.dir, ClipKind::Action);
+    anim.action_playing = action_active && action_count > 0;
+    const int count = anim.action_playing
+                    ? action_count
+                    : sprites.frame_count(anim.sprite_name, anim.dir, ClipKind::Move);
     if (count <= 0) {
         anim.frame_index = 0;
         anim.timer = 0.0f;
         anim.moving_timer = 0.0f;
+        anim.action_playing = false;
+        return;
+    }
+
+    if (anim.action_playing) {
+        anim.timer += dt;
+        const float action_frame_time = 0.10f;
+        while (anim.timer >= action_frame_time) {
+            anim.timer -= action_frame_time;
+            anim.frame_index = (anim.frame_index + 1) % count;
+        }
         return;
     }
 
@@ -103,11 +118,12 @@ void drawActor(const Sprites& sprites,
                float tile_h,
                float scale,
                Color tint) {
-    const int count = sprites.frame_count(anim.sprite_name, anim.dir);
+    const ClipKind kind = anim.action_playing ? ClipKind::Action : ClipKind::Move;
+    const int count = sprites.frame_count(anim.sprite_name, anim.dir, kind);
     if (count <= 0) return;
 
     const int idx = std::max(0, std::min(anim.frame_index, count - 1));
-    const Frame* fr = sprites.frame(anim.sprite_name, anim.dir, idx);
+    const Frame* fr = sprites.frame(anim.sprite_name, anim.dir, idx, kind);
     if (!fr) return;
 
     const Rectangle src = fr->rect();

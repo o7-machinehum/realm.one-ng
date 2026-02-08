@@ -28,6 +28,8 @@ struct MonsterRuntime {
     int size_h = 1;
     int hp = 30;
     int max_hp = 30;
+    int facing = 2; // S
+    uint32_t attack_anim_seq = 0;
     int speed_ms = 500;
     int move_accum_ms = 0;
     int exp_reward = 10;
@@ -53,6 +55,8 @@ struct PlayerRuntime {
     int max_hp = 100;
     int mana = 60;
     int max_mana = 60;
+    int facing = 2; // S
+    uint32_t attack_anim_seq = 0;
     int attack_target_monster_id = -1;
 };
 
@@ -78,6 +82,14 @@ int clampStep(int d) {
     if (d > 1) return 1;
     if (d < -1) return -1;
     return d;
+}
+
+int facingFromDelta(int dx, int dy, int fallback = 2) {
+    if (dx > 0) return 1;
+    if (dx < 0) return 3;
+    if (dy > 0) return 2;
+    if (dy < 0) return 0;
+    return fallback;
 }
 
 std::string normalizeId(std::string s) {
@@ -135,6 +147,8 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
         ps.max_hp = p.max_hp;
         ps.mana = p.mana;
         ps.max_mana = p.max_mana;
+        ps.facing = p.facing;
+        ps.attack_anim_seq = p.attack_anim_seq;
         ps.equipment = toEquippedMsgVec(p.data.equipment_by_type, p.data.inventory);
         gs.players.push_back(std::move(ps));
     }
@@ -142,7 +156,7 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
     for (const auto& m : monsters) {
         if (m.room != self.data.room) continue;
         gs.monsters.push_back(MonsterStateMsg{
-            m.id, m.name, m.sprite_tileset, m.sprite_name, m.size_w, m.size_h, m.room, m.x, m.y, m.hp, m.max_hp
+            m.id, m.name, m.sprite_tileset, m.sprite_name, m.size_w, m.size_h, m.room, m.x, m.y, m.hp, m.max_hp, m.facing, m.attack_anim_seq
         });
     }
 
@@ -271,6 +285,8 @@ void NetServer::recvLoop() {
                 sh,
                 def.max_hp,
                 def.max_hp,
+                2,
+                0,
                 std::max(1, def.speed_ms),
                 0,
                 def.exp_reward,
@@ -434,7 +450,7 @@ void NetServer::recvLoop() {
                 std::cout << "[server] connect from ";
                 printPeerIp(ev.peer->address);
                 std::cout << "\n";
-                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, -1};
+                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, -1};
             }
 
             else if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -443,7 +459,7 @@ void NetServer::recvLoop() {
 
                     auto pit = players.find(ev.peer);
                     if (pit == players.end()) {
-                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, -1};
+                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, -1};
                         pit = players.find(ev.peer);
                     }
                     PlayerRuntime& player = pit->second;
@@ -504,6 +520,9 @@ void NetServer::recvLoop() {
 
                             const int dx = clampStep(m.dx);
                             const int dy = clampStep(m.dy);
+                            if (dx != 0 || dy != 0) {
+                                player.facing = facingFromDelta(dx, dy, player.facing);
+                            }
 
                             const Room* room = world_.getRoom(player.data.room);
                             if (!room) room = world_.defaultRoom();
@@ -566,10 +585,28 @@ void NetServer::recvLoop() {
                             broadcastState(player.data.username + " moved");
                         } break;
 
+                        case MsgType::Rotate: {
+                            if (!player.authenticated) break;
+                            RotateMsg m = fromBytes<RotateMsg>(env.payload.data(), env.payload.size());
+                            const int dx = clampStep(m.dx);
+                            const int dy = clampStep(m.dy);
+                            if (dx == 0 && dy == 0) break;
+                            player.facing = facingFromDelta(dx, dy, player.facing);
+                            broadcastState(player.data.username + " turns");
+                        } break;
+
                         case MsgType::Attack: {
                             if (!player.authenticated) break;
                             AttackMsg m = fromBytes<AttackMsg>(env.payload.data(), env.payload.size());
                             player.attack_target_monster_id = m.target_monster_id;
+                            if (player.attack_target_monster_id >= 0) {
+                                for (const auto& mon : monsters) {
+                                    if (mon.id != player.attack_target_monster_id) continue;
+                                    if (mon.room != player.data.room) break;
+                                    player.facing = facingFromDelta(mon.x - player.data.x, mon.y - player.data.y, player.facing);
+                                    break;
+                                }
+                            }
 
                             if (player.attack_target_monster_id >= 0) {
                                 broadcastState(player.data.username + " targets monster " + std::to_string(player.attack_target_monster_id));
@@ -787,6 +824,11 @@ void NetServer::recvLoop() {
                     continue;
                 }
 
+                p.facing = facingFromDelta(mon.x - p.data.x, mon.y - p.data.y, p.facing);
+                p.attack_anim_seq += 1;
+                mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
+                mon.attack_anim_seq += 1;
+
                 const int dmg = 6;
                 mon.hp = std::max(0, mon.hp - dmg);
                 changed = true;
@@ -824,6 +866,7 @@ void NetServer::recvLoop() {
                     const int nx = mon.x + d[0];
                     const int ny = mon.y + d[1];
                     if (!canMonsterStand(mon, nx, ny, mon.id)) continue;
+                    mon.facing = facingFromDelta(d[0], d[1], mon.facing);
                     mon.x = nx;
                     mon.y = ny;
                     changed = true;

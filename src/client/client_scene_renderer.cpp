@@ -33,6 +33,16 @@ std::string pickSpriteName(const Sprites& sprites, const MonsterStateMsg& m) {
     return requested.empty() ? "player_1" : requested;
 }
 
+Dir dirFromFacingInt(int facing, Dir fallback = Dir::S) {
+    switch (facing) {
+        case 0: return Dir::N;
+        case 1: return Dir::E;
+        case 2: return Dir::S;
+        case 3: return Dir::W;
+        default: return fallback;
+    }
+}
+
 std::pair<float, float> smoothPos(std::unordered_map<std::string, std::pair<float, float>>& render_pos_by_key,
                                   const std::string& key,
                                   int target_x,
@@ -109,6 +119,16 @@ void drawScene(const Room& room,
     std::vector<MonsterVisual> monster_visuals;
     std::vector<PlayerVisual> player_visuals;
     std::vector<DrawCmd> draw_cmds;
+    const MonsterStateMsg* active_target = nullptr;
+    for (const auto& m : game_state.monsters) {
+        if (m.id == game_state.attack_target_monster_id) {
+            active_target = &m;
+            break;
+        }
+    }
+    const bool target_in_range = active_target &&
+                                 (std::abs(active_target->x - game_state.your_x) +
+                                  std::abs(active_target->y - game_state.your_y) <= 1);
 
     struct GroundItemVisual {
         const GroundItemStateMsg* msg = nullptr;
@@ -148,8 +168,17 @@ void drawScene(const Room& room,
         const int dx = m.x - prev.first;
         const int dy = m.y - prev.second;
         const bool moved = (dx != 0 || dy != 0);
-        anim.dir = dirFromDelta(dx, dy, anim.dir);
-        tickAnimation(anim, *mon_sprites, moved, dt);
+        anim.dir = dirFromFacingInt(m.facing, anim.dir);
+        auto& last_seq = scene_state.last_attack_seq_by_key[key];
+        auto& attack_t = scene_state.attack_fx_timer_by_key[key];
+        if (last_seq != m.attack_anim_seq) {
+            last_seq = m.attack_anim_seq;
+            attack_t = 0.35f;
+        } else {
+            attack_t = std::max(0.0f, attack_t - dt);
+        }
+        const bool action_active = target_in_range && (m.id == game_state.attack_target_monster_id);
+        tickAnimation(anim, *mon_sprites, moved, action_active || attack_t > 0.0f, dt);
         prev = {m.x, m.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
                                         key,
@@ -179,8 +208,16 @@ void drawScene(const Room& room,
         auto& prev = scene_state.prev_pos_by_key[key];
         const int dx = p.x - prev.first;
         const int dy = p.y - prev.second;
-        anim.dir = dirFromDelta(dx, dy, anim.dir);
-        tickAnimation(anim, sprites, (dx != 0 || dy != 0), dt);
+        anim.dir = dirFromFacingInt(p.facing, anim.dir);
+        auto& last_seq = scene_state.last_attack_seq_by_key[key];
+        auto& attack_t = scene_state.attack_fx_timer_by_key[key];
+        if (last_seq != p.attack_anim_seq) {
+            last_seq = p.attack_anim_seq;
+            attack_t = 0.35f;
+        } else {
+            attack_t = std::max(0.0f, attack_t - dt);
+        }
+        tickAnimation(anim, sprites, (dx != 0 || dy != 0), attack_t > 0.0f, dt);
         prev = {p.x, p.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
                                         key,
@@ -337,10 +374,6 @@ void drawScene(const Room& room,
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), 13.0f, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - 14.0f, 13, RAYWHITE);
-        if (p.user == game_state.your_user && game_state.attack_target_monster_id >= 0) {
-            const float r = 14.0f + 3.0f * std::sin(scene_state.attack_fx_t * 10.0f);
-            DrawRing(Vector2{x, y - tile_h * 0.3f}, r, r + 2.5f, 0, 360, 40, Fade(ORANGE, 0.85f));
-        }
     }
 
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {

@@ -20,24 +20,44 @@ std::string toLower(std::string s) {
 // internal access helpers
 // -----------------------------
 
-Clip& Sprites::clip(SpriteClips& sc, Dir d) {
-    switch (d) {
-        case Dir::N: return sc.n;
-        case Dir::E: return sc.e;
-        case Dir::S: return sc.s;
-        case Dir::W: return sc.w;
+Clip& Sprites::clip(SpriteClips& sc, Dir d, ClipKind kind) {
+    if (kind == ClipKind::Action) {
+        switch (d) {
+            case Dir::N: return sc.an;
+            case Dir::E: return sc.ae;
+            case Dir::S: return sc.as;
+            case Dir::W: return sc.aw;
+        }
+        return sc.as;
+    } else {
+        switch (d) {
+            case Dir::N: return sc.n;
+            case Dir::E: return sc.e;
+            case Dir::S: return sc.s;
+            case Dir::W: return sc.w;
+        }
+        return sc.s;
     }
-    return sc.s;
 }
 
-const Clip* Sprites::clip(const SpriteClips& sc, Dir d) {
-    switch (d) {
-        case Dir::N: return &sc.n;
-        case Dir::E: return &sc.e;
-        case Dir::S: return &sc.s;
-        case Dir::W: return &sc.w;
+const Clip* Sprites::clip(const SpriteClips& sc, Dir d, ClipKind kind) {
+    if (kind == ClipKind::Action) {
+        switch (d) {
+            case Dir::N: return &sc.an;
+            case Dir::E: return &sc.ae;
+            case Dir::S: return &sc.as;
+            case Dir::W: return &sc.aw;
+        }
+        return &sc.as;
+    } else {
+        switch (d) {
+            case Dir::N: return &sc.n;
+            case Dir::E: return &sc.e;
+            case Dir::S: return &sc.s;
+            case Dir::W: return &sc.w;
+        }
+        return &sc.s;
     }
-    return &sc.s;
 }
 
 // -----------------------------
@@ -157,7 +177,12 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
         const int frame_w = size_w_tiles * tile_w_;
         const int frame_h = size_h_tiles * tile_h_;
+        const int action_w_tiles = size_w_tiles * 2;
+        const int action_frame_w = action_w_tiles * tile_w_;
         constexpr int frames_per_dir = 4;
+        const bool full_block_anchor =
+            (anchor.row >= (4 * size_h_tiles)) &&
+            (anchor.row - ((8 * size_h_tiles) - 1) >= 0);
 
         // Direction rows from top to bottom: S, E, N, W.
         struct DirRow { Dir dir; int dir_idx; };
@@ -167,10 +192,12 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
         SpriteClips& sc = sprites_[name];
         for (const auto& dr : rows) {
-            const int block_bottom_row = anchor.row - ((3 - dr.dir_idx) * size_h_tiles);
-            const int top_row = block_bottom_row - (size_h_tiles - 1);
-            if (top_row < 0 || top_row >= total_rows) continue;
-            if (top_row + size_h_tiles > total_rows) continue;
+            const int move_bottom_row = full_block_anchor
+                ? (anchor.row - ((7 - dr.dir_idx) * size_h_tiles))
+                : (anchor.row - ((3 - dr.dir_idx) * size_h_tiles));
+            const int move_top_row = move_bottom_row - (size_h_tiles - 1);
+            if (move_top_row < 0 || move_top_row >= total_rows) continue;
+            if (move_top_row + size_h_tiles > total_rows) continue;
 
             for (int frame_idx = 0; frame_idx < frames_per_dir; ++frame_idx) {
                 const int col_left = anchor.col + frame_idx * size_w_tiles;
@@ -178,9 +205,28 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
                 if (col_left + size_w_tiles > columns_) break;
 
                 const int src_x = col_left * tile_w_;
-                const int src_y = top_row * tile_h_;
-                const int pseudo_tile_id = block_bottom_row * columns_ + col_left;
-                clip(sc, dr.dir).frames.emplace_back(pseudo_tile_id, frame_idx, src_x, src_y, frame_w, frame_h);
+                const int src_y = move_top_row * tile_h_;
+                const int pseudo_tile_id = move_bottom_row * columns_ + col_left;
+                clip(sc, dr.dir, ClipKind::Move).frames.emplace_back(pseudo_tile_id, frame_idx, src_x, src_y, frame_w, frame_h);
+            }
+
+            // Optional action strips are in the lower half, same row ordering,
+            // but each frame is twice as wide on X.
+            const int action_bottom_row = full_block_anchor
+                ? (anchor.row - ((3 - dr.dir_idx) * size_h_tiles))
+                : (move_bottom_row + (4 * size_h_tiles));
+            const int action_top_row = action_bottom_row - (size_h_tiles - 1);
+            if (action_top_row < 0 || action_top_row >= total_rows) continue;
+            if (action_top_row + size_h_tiles > total_rows) continue;
+            for (int frame_idx = 0; frame_idx < frames_per_dir; ++frame_idx) {
+                const int action_col_left = anchor.col + frame_idx * action_w_tiles;
+                if (action_col_left < 0) continue;
+                if (action_col_left + action_w_tiles > columns_) break;
+
+                const int src_x = action_col_left * tile_w_;
+                const int src_y = action_top_row * tile_h_;
+                const int pseudo_tile_id = action_bottom_row * columns_ + action_col_left;
+                clip(sc, dr.dir, ClipKind::Action).frames.emplace_back(pseudo_tile_id, frame_idx, src_x, src_y, action_frame_w, frame_h);
             }
         }
 
@@ -205,6 +251,10 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
         sort_clip(kv.second.e);
         sort_clip(kv.second.s);
         sort_clip(kv.second.w);
+        sort_clip(kv.second.an);
+        sort_clip(kv.second.ae);
+        sort_clip(kv.second.as);
+        sort_clip(kv.second.aw);
     }
 
     return true;
@@ -228,19 +278,19 @@ const Sprite* Sprites::get(const std::string& name) const
     return &out;
 }
 
-int Sprites::frame_count(const std::string& name, Dir dir) const
+int Sprites::frame_count(const std::string& name, Dir dir, ClipKind kind) const
 {
     auto it = sprites_.find(name);
     if (it == sprites_.end()) return 0;
-    const Clip* c = clip(it->second, dir);
+    const Clip* c = clip(it->second, dir, kind);
     return c ? (int)c->frames.size() : 0;
 }
 
-const Frame* Sprites::frame(const std::string& name, Dir dir, int index) const
+const Frame* Sprites::frame(const std::string& name, Dir dir, int index, ClipKind kind) const
 {
     auto it = sprites_.find(name);
     if (it == sprites_.end()) return nullptr;
-    const Clip* c = clip(it->second, dir);
+    const Clip* c = clip(it->second, dir, kind);
     if (!c) return nullptr;
     if (index < 0 || index >= (int)c->frames.size()) return nullptr;
     return &c->frames[index];

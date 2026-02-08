@@ -18,6 +18,7 @@ enum class MsgType : uint16_t {
     Room,
     LoginResult,
     Move,
+    Rotate,
     Attack,
     Pickup,
     Drop,
@@ -75,6 +76,16 @@ struct AttackMsg {
 
     template <class Ar>
     void serialize(Ar& ar) { ar(target_monster_id); }
+};
+
+struct RotateMsg {
+    int dx = 0;
+    int dy = 0;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(dx, dy);
+    }
 };
 
 struct PickupMsg {
@@ -149,11 +160,13 @@ struct PlayerStateMsg {
     int max_hp = 0;
     int mana = 0;
     int max_mana = 0;
+    int facing = 2; // 0=N,1=E,2=S,3=W
+    uint32_t attack_anim_seq = 0;
     std::vector<EquippedItemMsg> equipment;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(user, room, x, y, exp, hp, max_hp, mana, max_mana, equipment);
+        ar(user, room, x, y, exp, hp, max_hp, mana, max_mana, facing, attack_anim_seq, equipment);
     }
 };
 
@@ -169,10 +182,12 @@ struct MonsterStateMsg {
     int y = 0;
     int hp = 0;
     int max_hp = 0;
+    int facing = 2; // 0=N,1=E,2=S,3=W
+    uint32_t attack_anim_seq = 0;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, room, x, y, hp, max_hp);
+        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, room, x, y, hp, max_hp, facing, attack_anim_seq);
     }
 };
 
@@ -222,6 +237,7 @@ using Message = std::variant<
     Room,
     LoginResultMsg,
     MoveMsg,
+    RotateMsg,
     AttackMsg,
     PickupMsg,
     DropMsg,

@@ -17,6 +17,11 @@ exp_reward = 10
 item = "wooden_sword"
 chance = 0.20
 
+[[drops]]
+item = "wooden_shield"
+chance = 0.20
+
+
 # Extra fields (currently ignored by code, safe to edit/add):
 # defense = 2
 # agility = 4

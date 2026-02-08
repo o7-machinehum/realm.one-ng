@@ -17,6 +17,8 @@ struct SceneState {
     std::unordered_map<std::string, AnimationComponent> anim_by_key;
     std::unordered_map<std::string, std::pair<int, int>> prev_pos_by_key;
     std::unordered_map<std::string, std::pair<float, float>> render_pos_by_key;
+    std::unordered_map<std::string, uint32_t> last_attack_seq_by_key;
+    std::unordered_map<std::string, float> attack_fx_timer_by_key;
     int dragging_ground_item_id = -1;
     float attack_fx_t = 0.0f;
 };

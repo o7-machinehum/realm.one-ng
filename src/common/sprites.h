@@ -9,6 +9,7 @@
 #include "raylib.h" // Rectangle
 
 enum class Dir : unsigned char { N, E, S, W };
+enum class ClipKind : unsigned char { Move, Action };
 
 class Frame {
 public:
@@ -48,8 +49,8 @@ public:
     bool loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_overrides);
 
     // ---- access ----
-    int frame_count(const std::string& name, Dir dir) const;
-    const Frame* frame(const std::string& name, Dir dir, int index) const;
+    int frame_count(const std::string& name, Dir dir, ClipKind kind = ClipKind::Move) const;
+    const Frame* frame(const std::string& name, Dir dir, int index, ClipKind kind = ClipKind::Move) const;
 
     const Sprite* get(const std::string& name) const;
 
@@ -59,10 +60,10 @@ public:
     void debug_dump() const;
 
 private:
-    struct SpriteClips { Clip n, e, s, w; };
+    struct SpriteClips { Clip n, e, s, w; Clip an, ae, as, aw; };
 
-    static Clip& clip(SpriteClips& sc, Dir d);
-    static const Clip* clip(const SpriteClips& sc, Dir d);
+    static Clip& clip(SpriteClips& sc, Dir d, ClipKind kind);
+    static const Clip* clip(const SpriteClips& sc, Dir d, ClipKind kind);
     static void sort_clip(Clip& c);
 
     int tile_w_ = 0;

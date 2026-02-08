@@ -8,7 +8,7 @@
  </tile>
  <tile id="14">
   <properties>
-   <property name="name" value="wooden_sheld"/>
+   <property name="name" value="wooden_shield"/>
   </properties>
  </tile>
 </tileset>
