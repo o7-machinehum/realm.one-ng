@@ -3,13 +3,13 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx",
+    "activeFile": "",
     "expandedProjectPaths": [
-        "/home/machinehum/the_island/data/worlds/realm_one",
         "/home/machinehum/the_island/data/worlds",
-        "/home/machinehum/the_island/data/rooms",
+        "/home/machinehum/the_island/data/worlds/realm_one",
+        "art",
         ".",
-        "art"
+        "/home/machinehum/the_island/data/rooms"
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
@@ -164,9 +164,6 @@
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "openFiles": [
-        "/home/machinehum/the_island/data/worlds/realm_one/d1.tmx",
-        "/home/machinehum/the_island/data/worlds/realm_one/d2.tmx",
-        "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx"
     ],
     "project": "main.tiled-project",
     "property.type": "string",

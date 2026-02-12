@@ -98,7 +98,11 @@ Required CMake packages/modules:
 - Marker text is matched against monster template filename stem from `game/monsters/*.toml`.
 - Monster id matching is normalized (trim + lowercase) on server side.
 - Monster blocking footprint is anchor tile only (`x,y`); large sprites do not block their upper/side pixels.
-- Monsters wander server-side and avoid blocked tiles, players, and other monster anchors.
+- Monsters chase the nearest player in the same room (1-tile step AI each movement tick), and fall back to wandering when no player is present.
+- Monster movement avoids blocked tiles, players, and other monster anchors.
+- Monsters can melee-attack nearby players server-side (same room, tile-adjacent).
+- Monster melee damage uses the monster TOML `strength` stat (minimum 1).
+- On player defeat, server resets hp/mana to max and respawns on a walkable tile in the current room.
 - `monster_size` in TOML (`"WxH"`) is used for sprite dimensions and server-side monster metadata.
 
 ### Sprite loader contract

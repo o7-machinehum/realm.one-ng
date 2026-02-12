@@ -3,10 +3,13 @@
 #include "auth_db.h"
 #include "auth_crypto.h"
 #include "item_defs.h"
+#include "monster_combat.h"
 #include "monster_defs.h"
+#include "server_runtime.h"
 #include "world.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
@@ -24,54 +27,6 @@ constexpr int kInventoryLimit = 8;
 constexpr int kCombatDamagePerTick = 6;
 constexpr int kTickMs = 500;
 constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick
-
-struct MonsterRuntime {
-    int id = 0;
-    std::string def_id;
-    std::string name;
-    std::string sprite_tileset;
-    std::string sprite_name;
-    std::string room;
-    int x = 0;
-    int y = 0;
-    int size_w = 1;
-    int size_h = 1;
-    int hp = 30;
-    int max_hp = 30;
-    int facing = kDefaultFacingSouth; // S
-    uint32_t attack_anim_seq = 0;
-    int speed_ms = 500;
-    int move_accum_ms = 0;
-    int exp_reward = 10;
-    std::vector<MonsterDropDef> drops;
-};
-
-struct GroundItemRuntime {
-    int id = 0;
-    std::string item_id;
-    std::string name;
-    std::string sprite_tileset;
-    std::string sprite_name;
-    int sprite_w_tiles = 1;
-    int sprite_h_tiles = 1;
-    int sprite_clip = 0; // 0=Move, 1=Death
-    std::string room;
-    int x = 0;
-    int y = 0;
-};
-
-struct PlayerRuntime {
-    ENetPeer* peer = nullptr;
-    bool authenticated = false;
-    PersistedPlayer data;
-    int hp = 100;
-    int max_hp = 100;
-    int mana = 60;
-    int max_mana = 60;
-    int facing = kDefaultFacingSouth; // S
-    uint32_t attack_anim_seq = 0;
-    int attack_target_monster_id = -1;
-};
 
 void sendWire(ENetPeer* peer,
               uint8_t channel,
@@ -103,6 +58,12 @@ int facingFromDelta(int dx, int dy, int fallback = kDefaultFacingSouth) {
     if (dy > 0) return 2;
     if (dy < 0) return 0;
     return fallback;
+}
+
+int signum(int v) {
+    if (v > 0) return 1;
+    if (v < 0) return -1;
+    return 0;
 }
 
 std::string normalizeId(std::string s) {
@@ -342,7 +303,8 @@ void NetServer::recvLoop() {
                 sh,
                 def.max_hp,
                 def.max_hp,
-                2,
+                std::max(1, def.strength),
+                kDefaultFacingSouth,
                 0,
                 std::max(1, def.speed_ms),
                 0,
@@ -492,10 +454,65 @@ void NetServer::recvLoop() {
         return true;
     };
 
+    auto nearestPlayerForMonster = [&](const MonsterRuntime& mon, int& out_x, int& out_y) -> bool {
+        int best_dist = 999999;
+        bool found = false;
+        for (const auto& [_, p] : players) {
+            if (!p.authenticated) continue;
+            if (p.data.room != mon.room) continue;
+            const int dist = std::abs(mon.x - p.data.x) + std::abs(mon.y - p.data.y);
+            if (dist >= best_dist) continue;
+            best_dist = dist;
+            out_x = p.data.x;
+            out_y = p.data.y;
+            found = true;
+        }
+        return found;
+    };
+
+    auto tryMoveMonster = [&](MonsterRuntime& mon, const std::array<std::pair<int, int>, 4>& dirs) -> bool {
+        for (const auto& [dx, dy] : dirs) {
+            if (dx == 0 && dy == 0) continue;
+            const int nx = mon.x + dx;
+            const int ny = mon.y + dy;
+            if (!canMonsterStand(mon, nx, ny, mon.id)) continue;
+            mon.facing = facingFromDelta(dx, dy, mon.facing);
+            mon.x = nx;
+            mon.y = ny;
+            return true;
+        }
+        return false;
+    };
+
     auto rollChance = [](float p) -> bool {
         const float clamped = std::max(0.0f, std::min(1.0f, p));
         const float r = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
         return r <= clamped;
+    };
+
+    auto findRespawnTile = [&](const std::string& room_name, int& out_x, int& out_y) -> bool {
+        const Room* room = world_.getRoom(room_name);
+        if (!room) return false;
+
+        const int fallback_x = std::max(0, std::min(2, room->map_width() - 1));
+        const int fallback_y = std::max(0, std::min(2, room->map_height() - 1));
+        if (room->isWalkable(fallback_x, fallback_y) &&
+            !occupiedByMonster(room_name, fallback_x, fallback_y)) {
+            out_x = fallback_x;
+            out_y = fallback_y;
+            return true;
+        }
+
+        for (int y = 0; y < room->map_height(); ++y) {
+            for (int x = 0; x < room->map_width(); ++x) {
+                if (!room->isWalkable(x, y)) continue;
+                if (occupiedByMonster(room_name, x, y)) continue;
+                out_x = x;
+                out_y = y;
+                return true;
+            }
+        }
+        return false;
     };
 
     const auto tick_dt = std::chrono::milliseconds(kTickMs);
@@ -974,25 +991,69 @@ void NetServer::recvLoop() {
                 if (mon.move_accum_ms < std::max(1, mon.speed_ms)) continue;
                 mon.move_accum_ms = 0;
 
-                // 25% chance to idle this tick to avoid jittery movement.
-                if ((std::rand() % kMonsterIdleChanceDivisor) == 0) continue;
-
-                static constexpr int dirs[4][2] = {
+                std::array<std::pair<int, int>, 4> dirs = {{
                     {0, -1}, {1, 0}, {0, 1}, {-1, 0}
-                };
+                }};
                 const int start = std::rand() % 4;
-                for (int i = 0; i < 4; ++i) {
-                    const int* d = dirs[(start + i) % 4];
-                    const int nx = mon.x + d[0];
-                    const int ny = mon.y + d[1];
-                    if (!canMonsterStand(mon, nx, ny, mon.id)) continue;
-                    mon.facing = facingFromDelta(d[0], d[1], mon.facing);
-                    mon.x = nx;
-                    mon.y = ny;
+                std::array<std::pair<int, int>, 4> random_dirs = {{
+                    dirs[(start + 0) % 4],
+                    dirs[(start + 1) % 4],
+                    dirs[(start + 2) % 4],
+                    dirs[(start + 3) % 4]
+                }};
+
+                bool moved = false;
+                int px = 0;
+                int py = 0;
+                if (nearestPlayerForMonster(mon, px, py)) {
+                    std::array<std::pair<int, int>, 4> chase_dirs = {};
+                    int idx = 0;
+                    auto push_unique = [&](int dx, int dy) {
+                        if (dx == 0 && dy == 0) return;
+                        for (int i = 0; i < idx; ++i) {
+                            if (chase_dirs[(size_t)i].first == dx && chase_dirs[(size_t)i].second == dy) return;
+                        }
+                        if (idx < 4) chase_dirs[(size_t)idx++] = {dx, dy};
+                    };
+
+                    const int dx_to_player = px - mon.x;
+                    const int dy_to_player = py - mon.y;
+                    const int sx = signum(dx_to_player);
+                    const int sy = signum(dy_to_player);
+                    if (std::abs(dx_to_player) >= std::abs(dy_to_player)) {
+                        push_unique(sx, 0);
+                        push_unique(0, sy);
+                    } else {
+                        push_unique(0, sy);
+                        push_unique(sx, 0);
+                    }
+                    for (const auto& [rdx, rdy] : random_dirs) push_unique(rdx, rdy);
+                    moved = tryMoveMonster(mon, chase_dirs);
+                } else {
+                    // 25% chance to idle this tick to avoid jittery movement.
+                    if ((std::rand() % kMonsterIdleChanceDivisor) != 0) {
+                        moved = tryMoveMonster(mon, random_dirs);
+                    }
+                }
+
+                if (moved) {
                     changed = true;
                     if (tick_event.empty()) tick_event = "monsters moved";
-                    break;
                 }
+            }
+
+            const MonsterCombatResult monster_combat = resolveMonsterAttacks(
+                players,
+                monsters,
+                findRespawnTile,
+                kMeleeRangeTiles
+            );
+            if (monster_combat.changed) changed = true;
+            if (!monster_combat.event_text.empty()) tick_event = monster_combat.event_text;
+            for (ENetPeer* defeated_peer : monster_combat.defeated_players) {
+                auto pit = players.find(defeated_peer);
+                if (pit == players.end()) continue;
+                savePlayerNow(pit->second);
             }
 
             if (changed) {

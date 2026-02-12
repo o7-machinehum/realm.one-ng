@@ -66,6 +66,7 @@ target_include_directories(client PRIVATE
 add_executable(server
     src/server/server.cpp
     src/server/net_server.cpp
+    src/server/monster_combat.cpp
     src/server/world.cpp
     src/server/monster_defs.cpp
     src/server/item_defs.cpp

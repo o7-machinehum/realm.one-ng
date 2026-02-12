@@ -1,0 +1,59 @@
+#pragma once
+
+#include "auth_db.h"
+#include "monster_defs.h"
+
+#include <enet/enet.h>
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct MonsterRuntime {
+    int id = 0;
+    std::string def_id;
+    std::string name;
+    std::string sprite_tileset;
+    std::string sprite_name;
+    std::string room;
+    int x = 0;
+    int y = 0;
+    int size_w = 1;
+    int size_h = 1;
+    int hp = 30;
+    int max_hp = 30;
+    int strength = 6;
+    int facing = 2; // South
+    uint32_t attack_anim_seq = 0;
+    int speed_ms = 500;
+    int move_accum_ms = 0;
+    int exp_reward = 10;
+    std::vector<MonsterDropDef> drops;
+};
+
+struct GroundItemRuntime {
+    int id = 0;
+    std::string item_id;
+    std::string name;
+    std::string sprite_tileset;
+    std::string sprite_name;
+    int sprite_w_tiles = 1;
+    int sprite_h_tiles = 1;
+    int sprite_clip = 0; // 0=Move, 1=Death
+    std::string room;
+    int x = 0;
+    int y = 0;
+};
+
+struct PlayerRuntime {
+    ENetPeer* peer = nullptr;
+    bool authenticated = false;
+    PersistedPlayer data;
+    int hp = 100;
+    int max_hp = 100;
+    int mana = 60;
+    int max_mana = 60;
+    int facing = 2; // South
+    uint32_t attack_anim_seq = 0;
+    int attack_target_monster_id = -1;
+};
