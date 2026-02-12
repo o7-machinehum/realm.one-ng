@@ -13,8 +13,8 @@ void pushBounded(std::deque<std::string>& logs, std::string line) {
 bool tryParseLogin(const std::string& input, LoginMsg& out) {
     std::istringstream iss(input);
     std::string cmd;
-    iss >> cmd >> out.user >> out.pass;
-    return cmd == "/login" && !out.user.empty() && !out.pass.empty();
+    iss >> cmd >> out.user;
+    return cmd == "/login" && !out.user.empty();
 }
 
 bool tryParsePickup(const std::string& input, PickupMsg& out) {

@@ -102,11 +102,13 @@ AuthDb::AuthDb(const std::string& db_path) {
     execOrThrow(db_,
         "CREATE TABLE IF NOT EXISTS players ("
         "username TEXT PRIMARY KEY,"
-        "password TEXT NOT NULL,"
+        "password TEXT NOT NULL DEFAULT '',"
+        "public_key TEXT NOT NULL DEFAULT '',"
         "room TEXT NOT NULL DEFAULT '0.tmx',"
         "exp INTEGER NOT NULL DEFAULT 0"
         ");");
 
+    ensureColumn(db_, "players", "public_key", "TEXT NOT NULL DEFAULT ''");
     ensureColumn(db_, "players", "x", "INTEGER NOT NULL DEFAULT 2");
     ensureColumn(db_, "players", "y", "INTEGER NOT NULL DEFAULT 2");
     ensureColumn(db_, "players", "inventory", "TEXT NOT NULL DEFAULT ''");
@@ -117,15 +119,20 @@ AuthDb::~AuthDb() {
     if (db_) sqlite3_close(db_);
 }
 
-bool AuthDb::verifyOrCreateUser(const std::string& username,
-                                const std::string& password,
+bool AuthDb::loginWithPublicKey(const std::string& username,
+                                const std::string& public_key_hex,
+                                bool create_account,
                                 PersistedPlayer& out_player,
                                 std::string& message) {
     out_player = PersistedPlayer{};
     out_player.username = username;
+    if (username.empty() || public_key_hex.empty()) {
+        message = "missing username or public key";
+        return false;
+    }
 
     sqlite3_stmt* select_stmt = nullptr;
-    const char* select_sql = "SELECT password, room, exp, x, y, inventory, equipment FROM players WHERE username = ?1;";
+    const char* select_sql = "SELECT public_key, room, exp, x, y, inventory, equipment FROM players WHERE username = ?1;";
     if (sqlite3_prepare_v2(db_, select_sql, -1, &select_stmt, nullptr) != SQLITE_OK) {
         message = "database prepare failed";
         return false;
@@ -135,7 +142,7 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
 
     const int rc = sqlite3_step(select_stmt);
     if (rc == SQLITE_ROW) {
-        const char* db_pass = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 0));
+        const char* db_pub = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 0));
         const char* db_room = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 1));
         out_player.exp = sqlite3_column_int(select_stmt, 2);
         out_player.x = sqlite3_column_int(select_stmt, 3);
@@ -143,15 +150,19 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
         const char* inv = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 5));
         const char* eqp = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 6));
 
-        const bool ok = (db_pass != nullptr) && (password == db_pass);
+        const bool ok = (db_pub != nullptr) && (public_key_hex == db_pub);
         if (db_room) out_player.room = db_room;
         if (inv) out_player.inventory = splitInventory(inv);
         if (eqp) out_player.equipment_by_type = splitEquipment(eqp);
 
         sqlite3_finalize(select_stmt);
 
+        if (create_account) {
+            message = "username already exists";
+            return false;
+        }
         if (!ok) {
-            message = "invalid credentials";
+            message = "public key mismatch";
             return false;
         }
 
@@ -166,6 +177,23 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
         return false;
     }
 
+    if (!create_account) {
+        message = "unknown username";
+        return false;
+    }
+
+    sqlite3_stmt* check_pub_stmt = nullptr;
+    const char* check_pub_sql = "SELECT 1 FROM players WHERE public_key = ?1 LIMIT 1;";
+    if (sqlite3_prepare_v2(db_, check_pub_sql, -1, &check_pub_stmt, nullptr) == SQLITE_OK) {
+        sqlite3_bind_text(check_pub_stmt, 1, public_key_hex.c_str(), -1, SQLITE_TRANSIENT);
+        const int pub_rc = sqlite3_step(check_pub_stmt);
+        sqlite3_finalize(check_pub_stmt);
+        if (pub_rc == SQLITE_ROW) {
+            message = "public key already registered";
+            return false;
+        }
+    }
+
     out_player.room = "0.tmx";
     out_player.exp = 0;
     out_player.x = 2;
@@ -174,8 +202,8 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
 
     sqlite3_stmt* insert_stmt = nullptr;
     const char* insert_sql =
-        "INSERT INTO players(username, password, room, exp, x, y, inventory) "
-        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);";
+        "INSERT INTO players(username, password, public_key, room, exp, x, y, inventory) "
+        "VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7);";
     if (sqlite3_prepare_v2(db_, insert_sql, -1, &insert_stmt, nullptr) != SQLITE_OK) {
         message = "database prepare failed";
         return false;
@@ -183,7 +211,7 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
 
     const std::string inv = joinInventory(out_player.inventory);
     sqlite3_bind_text(insert_stmt, 1, username.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(insert_stmt, 2, password.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(insert_stmt, 2, public_key_hex.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(insert_stmt, 3, out_player.room.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(insert_stmt, 4, out_player.exp);
     sqlite3_bind_int(insert_stmt, 5, out_player.x);

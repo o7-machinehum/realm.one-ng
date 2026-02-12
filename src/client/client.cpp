@@ -1,11 +1,13 @@
 #include "raylib.h"
 
 #include "client_support.h"
+#include "client_ui_primitives.h"
 #include "client_inventory_ui.h"
 #include "client_layout.h"
 #include "client_scene_renderer.h"
 #include "client_sheet_cache.h"
 #include "client_windows.h"
+#include "auth_ui.h"
 #include "msg.h"
 #include "monster_defs.h"
 #include "net_client.h"
@@ -61,6 +63,7 @@ void drawLabeledBar(Font font,
                        RAYWHITE);
 }
 
+// Parses raw chat input into a typed speech message.
 bool parseSpeechInput(const std::string& input, ChatMsg& out) {
     std::istringstream iss(input);
     std::string cmd;
@@ -83,6 +86,7 @@ bool parseSpeechInput(const std::string& input, ChatMsg& out) {
     out.from.clear();
     return !out.text.empty();
 }
+
 } // namespace
 
 // Owns the client runtime: input, networking mailbox pump, and frame rendering.
@@ -135,6 +139,8 @@ int main(int argc, char** argv) {
     float rotate_repeat_timer = 0.0f;
     bool rotate_repeat_started = false;
     bool chat_input_active = false;
+    client::AuthUiState auth_ui;
+    client::initAuthUi(auth_ui);
 
     const client::SceneConfig scene_cfg{};
     const client::InventoryUiConfig inventory_cfg{};
@@ -148,6 +154,13 @@ int main(int argc, char** argv) {
     }
 
     while (!WindowShouldClose()) {
+        if (auto login = mailbox.pop<LoginResultMsg>(MsgType::LoginResult)) {
+            client::onAuthLoginResult(auth_ui, *login, logs);
+        }
+        if (client::tickAndDrawAuthUi(auth_ui, mailbox, ui_font, logs)) {
+            continue;
+        }
+
         if (chat_input_active) {
             while (int key = GetCharPressed()) {
                 if (key >= 32 && key <= 126 && input.size() < kMaxInputChars) {
@@ -173,8 +186,7 @@ int main(int argc, char** argv) {
                     AttackMsg attack;
 
                     if (client::tryParseLogin(input, login)) {
-                        mailbox.push(MsgType::Login, login);
-                        client::pushBounded(logs, "Sent /login for " + login.user);
+                        client::pushBounded(logs, "Use the login screen to authenticate");
                     } else if (client::tryParsePickup(input, pickup)) {
                         mailbox.push(MsgType::Pickup, pickup);
                         client::pushBounded(logs, "Pickup requested");
@@ -247,9 +259,6 @@ int main(int argc, char** argv) {
             if (IsKeyPressed(KEY_B)) mailbox.push(MsgType::Drop, DropMsg{0});
         }
 
-        if (auto login = mailbox.pop<LoginResultMsg>(MsgType::LoginResult)) {
-            (void)login;
-        }
         if (auto chat = mailbox.pop<ChatMsg>(MsgType::Chat)) {
             const std::string from = chat->from.empty()
                 ? (game_state ? game_state->your_user : std::string{})
@@ -527,29 +536,26 @@ int main(int argc, char** argv) {
 
         const float input_h = kInputOverlayHeight;
         const float input_y = static_cast<float>(play_y + play_h) - input_h - kInputOverlayMargin;
-        DrawRectangle(play_x + static_cast<int>(kInputOverlayMargin),
-                      static_cast<int>(input_y),
-                      play_w - static_cast<int>(kInputOverlayMargin * 2.0f),
-                      static_cast<int>(input_h),
-                      Color{0, 0, 0, 150});
-        DrawRectangleLines(play_x + static_cast<int>(kInputOverlayMargin),
-                           static_cast<int>(input_y),
-                           play_w - static_cast<int>(kInputOverlayMargin * 2.0f),
-                           static_cast<int>(input_h),
-                           Color{90, 90, 90, 220});
+        const Rectangle chat_input_rect{
+            static_cast<float>(play_x) + kInputOverlayMargin,
+            input_y,
+            static_cast<float>(play_w) - (kInputOverlayMargin * 2.0f),
+            input_h
+        };
+        client::drawUiPanel(chat_input_rect, Color{0, 0, 0, 150}, Color{90, 90, 90, 220}, 1.0f);
         if (chat_input_active) {
             SetMouseCursor(MOUSE_CURSOR_IBEAM);
         }
-        const bool blink_on = (static_cast<int>(GetTime() * 2.0) % 2) == 0;
         const std::string prefix = chat_input_active ? "> " : "[Enter] Chat: ";
-        const std::string caret = (chat_input_active && blink_on) ? "_" : "";
-        const std::string prompt = prefix + input + caret;
-        client::drawUiText(ui_font,
-                           prompt,
-                           static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX,
-                           input_y + kInputTextOffsetY,
-                           kInputFontSize,
-                           chat_input_active ? YELLOW : LIGHTGRAY);
+        client::drawUiTextInputLine(ui_font,
+                                    input,
+                                    static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX,
+                                    input_y + kInputTextOffsetY,
+                                    kInputFontSize,
+                                    prefix,
+                                    chat_input_active,
+                                    YELLOW,
+                                    LIGHTGRAY);
 
         EndDrawing();
     }

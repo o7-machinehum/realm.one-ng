@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(raylib REQUIRED)
 find_package(tinyxml2 REQUIRED)
 find_package(cereal REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 # ENet doesn't have a CMake config, use pkg-config
 find_package(PkgConfig REQUIRED)
@@ -15,6 +16,7 @@ pkg_check_modules(SQLITE3 REQUIRED sqlite3)
 
 # Shared code
 add_library(qg_common
+  src/common/auth_crypto.cpp
   src/common/sprites.cpp
   src/common/room.cpp
   src/common/entity.cpp
@@ -27,13 +29,17 @@ target_include_directories(qg_common PUBLIC
 
 target_link_libraries(qg_common PUBLIC
   tinyxml2::tinyxml2
+  OpenSSL::Crypto
 )
 
 # ----- Client
 add_executable(client
     src/client/client.cpp
+    src/client/auth_ui.cpp
+    src/client/client_ui_primitives.cpp
     src/client/client_layout.cpp
     src/client/client_support.cpp
+    src/client/local_keys.cpp
     src/client/client_sheet_cache.cpp
     src/client/client_scene_renderer.cpp
     src/client/client_inventory_ui.cpp

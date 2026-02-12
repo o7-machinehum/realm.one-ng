@@ -31,11 +31,13 @@ enum class MsgType : uint16_t {
 
 struct LoginMsg {
     std::string user;
-    std::string pass;
+    std::string public_key_hex;
+    std::string signature_hex;
+    bool create_account = false;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(user, pass);
+        ar(user, public_key_hex, signature_hex, create_account);
     }
 };
 

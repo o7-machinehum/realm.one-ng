@@ -1,4 +1,5 @@
 #include "client_inventory_ui.h"
+#include "client_ui_primitives.h"
 
 #include <algorithm>
 
@@ -12,6 +13,7 @@ bool isEquipType(const std::string& t) {
 
 } // namespace
 
+// Draws the inventory grid/body and emits drag/swap/drop/equip interactions.
 void drawInventoryUi(Font ui_font,
                      const GameStateMsg& game_state,
                      InventoryUiState& state,
@@ -99,8 +101,6 @@ void drawInventoryUi(Font ui_font,
             cfg.slot_size,
             cfg.slot_size
         };
-        DrawRectangleRec(slot, Color{37, 42, 48, 230});
-
         bool equipped = false;
         if (i < inv_count) {
             const std::string type = resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[i]) : std::string{};
@@ -111,8 +111,7 @@ void drawInventoryUi(Font ui_font,
                 }
             }
         }
-        DrawRectangleLinesEx(slot, equipped ? 2.0f : 1.0f, equipped ? YELLOW : Color{90, 102, 117, 255});
-
+        drawUiPanel(slot, Color{37, 42, 48, 230}, equipped ? YELLOW : Color{90, 102, 117, 255}, equipped ? 2.0f : 1.0f);
         if (i < inv_count && (!state.drag.active || i != state.drag.from_index)) {
             const Rectangle icon_rect{slot.x + 4.0f, slot.y + 4.0f, slot.width - 8.0f, slot.height - 8.0f};
             if (!draw_item_icon || !draw_item_icon(game_state.inventory[i], icon_rect)) {

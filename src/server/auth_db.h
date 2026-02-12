@@ -24,8 +24,9 @@ public:
     AuthDb(const AuthDb&) = delete;
     AuthDb& operator=(const AuthDb&) = delete;
 
-    bool verifyOrCreateUser(const std::string& username,
-                            const std::string& password,
+    bool loginWithPublicKey(const std::string& username,
+                            const std::string& public_key_hex,
+                            bool create_account,
                             PersistedPlayer& out_player,
                             std::string& message);
     bool savePlayer(const PersistedPlayer& player);

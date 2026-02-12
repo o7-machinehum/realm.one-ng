@@ -1,5 +1,6 @@
 #include "client_windows.h"
 
+#include "client_ui_primitives.h"
 #include "client_support.h"
 
 #include <algorithm>
@@ -101,16 +102,14 @@ UiWindowFrameResult drawWindowFrame(UiWindowsState& state,
         }
     }
 
-    DrawRectangleRec(frame_rect, Color{24, 28, 32, 230});
+    drawUiPanel(frame_rect, Color{24, 28, 32, 230}, Color{96, 109, 124, 255}, 1.0f);
     DrawRectangle(static_cast<int>(window.rect.x), static_cast<int>(window.rect.y),
                   static_cast<int>(window.rect.width), static_cast<int>(kHeaderH),
                   Color{43, 54, 63, 255});
-    DrawRectangleLinesEx(frame_rect, 1.0f, Color{96, 109, 124, 255});
 
     drawUiText(font, window.title, window.rect.x + kTitlePadX, window.rect.y + kTitlePadY, title_size, RAYWHITE);
 
-    DrawRectangleRec(cbtn, Color{55, 63, 70, 255});
-    DrawRectangleLinesEx(cbtn, 1.0f, Color{120, 126, 135, 255});
+    drawUiPanel(cbtn, Color{55, 63, 70, 255}, Color{120, 126, 135, 255}, 1.0f);
     const char* glyph = window.collapsed ? "+" : "-";
     const float glyph_size = 16.0f;
     const Vector2 glyph_dims = MeasureTextEx(font, glyph, glyph_size, 1.0f);

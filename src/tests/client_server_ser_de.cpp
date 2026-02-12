@@ -81,7 +81,7 @@ static int runServer(uint16_t port) {
                             LoginMsg m = fromBytes<LoginMsg>(env.payload.data(), env.payload.size());
 
                             std::cout << "[server] LOGIN user=" << m.user
-                                      << " pass=" << m.pass << "\n";
+                                      << " create=" << (m.create_account ? "yes" : "no") << "\n";
 
                             // Reply with a Chat message
                             // ChatMsg reply{"server", "welcome " + m.user};
@@ -156,7 +156,11 @@ static int runClient(const char* hostName, uint16_t port) {
 
     // Send a Login message
     {
-        LoginMsg login{"Ryan", "hunter2"};
+        LoginMsg login{};
+        login.user = "Ryan";
+        login.public_key_hex = "test";
+        login.signature_hex = "test";
+        login.create_account = false;
         auto wire = pack(MsgType::Login, login);
         sendWire(peer, /*channel*/ 0, wire);
     }

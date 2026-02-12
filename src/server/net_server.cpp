@@ -1,6 +1,7 @@
 #include "net_server.h"
 
 #include "auth_db.h"
+#include "auth_crypto.h"
 #include "item_defs.h"
 #include "monster_defs.h"
 #include "world.h"
@@ -195,6 +196,29 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
     }
 
     return gs;
+}
+
+// Validates login signature and executes create/login against persistent auth storage.
+bool authenticateLoginRequest(const LoginMsg& m,
+                              AuthDb& auth_db,
+                              PersistedPlayer& persisted,
+                              std::string& message) {
+    if (m.user.empty() || m.public_key_hex.empty() || m.signature_hex.empty()) {
+        message = "missing login fields";
+        return false;
+    }
+    const std::string payload = makeAuthPayload(m.user, m.public_key_hex, m.create_account);
+    if (!verifyEd25519Hex(m.public_key_hex, payload, m.signature_hex)) {
+        message = "invalid signature";
+        return false;
+    }
+    return auth_db.loginWithPublicKey(
+        m.user,
+        m.public_key_hex,
+        m.create_account,
+        persisted,
+        message
+    );
 }
 
 } // namespace
@@ -508,7 +532,7 @@ void NetServer::recvLoop() {
 
                             PersistedPlayer persisted;
                             std::string message;
-                            bool ok = auth_db_.verifyOrCreateUser(m.user, m.pass, persisted, message);
+                            const bool ok = authenticateLoginRequest(m, auth_db_, persisted, message);
 
                             LoginResultMsg result;
                             result.ok = ok;
