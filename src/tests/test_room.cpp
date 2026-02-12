@@ -6,11 +6,11 @@
 
 int main()
 {
-    InitWindow(960, 640, "test_room: d1.tmx");
+    InitWindow(960, 640, "test_room: 500_500/rooms/0.tmx");
     SetTargetFPS(60);
 
     Room room;
-    if (!room.loadFromFile("data/rooms/d1.tmx")) return 1;
+    if (!room.loadFromFile("data/worlds/500_500/rooms/0.tmx")) return 1;
 
     RoomRenderer rr;
     if (!rr.load(room)) return 1;

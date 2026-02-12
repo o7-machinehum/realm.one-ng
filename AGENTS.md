@@ -66,6 +66,25 @@ Required CMake packages/modules:
 - Portal resolution supports nested class properties and optional `world` override.
 - Portal teleport is skipped if destination tile is not walkable.
 - Movement and state sync are server-authoritative.
+- Multi-world topology uses position-based packs `data/worlds/<x>_<y>/` plus `data/worlds/globe.world`.
+
+### World travel semantics
+- Gameplay model is classic top-down Zelda-like screen transitions.
+- One world corresponds to one screen-sized map.
+- Players can walk to any map edge (left/right/top/bottom) to move into an adjacent world/screen.
+- Inside a single world, there are vertical levels/floors and players can move up/down between those levels.
+- Cross-world movement is edge-based overworld traversal, not staircase/floor/level-based travel.
+- Cross-world edge traversal should happen on the world's overworld level (`level 0`).
+- World adjacency is authored in `data/worlds/globe.world` (global placement of level-0 screens).
+- Edge transitions must remain server-authoritative (never client-trusted).
+- There is no separate standalone "overworld" TMX: the stitched set of all worlds' `level 0` screens is the overworld.
+- `data/worlds/globe.world` should point directly to each world's `rooms/0.tmx` (not nested `.world` files).
+- Each world pack remains independently editable/owned under `data/worlds/<x>_<y>/` without requiring edits to other world packs.
+- Folder naming convention encodes world position:
+  - `500_500` center
+  - `500_501` north
+  - `501_500` east
+  - `499_500` south
 
 ### Collision semantics
 - Default tiles are walkable.

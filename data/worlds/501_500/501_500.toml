@@ -1,0 +1,6 @@
+name = "501_500"
+display_name = "East World"
+pvp_enabled = true
+starting_room = "0.tmx"
+starting_x = 2
+starting_y = 2

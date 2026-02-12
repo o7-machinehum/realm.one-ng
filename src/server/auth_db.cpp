@@ -103,7 +103,7 @@ AuthDb::AuthDb(const std::string& db_path) {
         "CREATE TABLE IF NOT EXISTS players ("
         "username TEXT PRIMARY KEY,"
         "password TEXT NOT NULL,"
-        "room TEXT NOT NULL DEFAULT 'd1.tmx',"
+        "room TEXT NOT NULL DEFAULT '0.tmx',"
         "exp INTEGER NOT NULL DEFAULT 0"
         ");");
 
@@ -166,7 +166,7 @@ bool AuthDb::verifyOrCreateUser(const std::string& username,
         return false;
     }
 
-    out_player.room = "d1.tmx";
+    out_player.room = "0.tmx";
     out_player.exp = 0;
     out_player.x = 2;
     out_player.y = 2;

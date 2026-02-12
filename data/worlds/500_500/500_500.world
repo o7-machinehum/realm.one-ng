@@ -1,18 +1,26 @@
 {
+    "floor": "500_500",
     "maps": [
         {
-            "fileName": "rooms/d1.tmx",
+            "fileName": "rooms/0.tmx",
             "height": 320,
             "width": 480,
             "x": 0,
             "y": 0
         },
         {
-            "fileName": "rooms/d2.tmx",
+            "fileName": "rooms/p1.tmx",
             "height": 320,
             "width": 480,
             "x": 480,
             "y": 0
+        },
+        {
+            "fileName": "rooms/n1.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 0,
+            "y": 320
         }
     ],
     "onlyShowAdjacentMaps": false,

@@ -29,6 +29,17 @@ std::string addTmxExt(std::string s) {
     return s + ".tmx";
 }
 
+std::optional<std::pair<int, int>> parseGridPos(const std::string& world_name) {
+    static const std::regex re("^(-?[0-9]+)_(-?[0-9]+)$");
+    std::smatch m;
+    if (!std::regex_match(world_name, m, re)) return std::nullopt;
+    try {
+        return std::pair<int, int>{std::stoi(m[1]), std::stoi(m[2])};
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 void addAlias(std::unordered_map<std::string, std::string>& aliases,
               const std::string& raw_alias,
               const std::string& canonical) {
@@ -56,28 +67,55 @@ World::World(std::string source) {
 
 void World::loadDirectory(const std::string& world_dir) {
     const fs::path dir(world_dir);
+    if (!fs::exists(dir) || !fs::is_directory(dir)) return;
 
-    // Prefer data-driven world files when present.
+    // Prefer data-driven world files when present, including nested world dirs.
     std::vector<fs::path> world_files;
-    if (fs::exists(dir) && fs::is_directory(dir)) {
-        for (const auto& entry : fs::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) continue;
-            if (entry.path().extension() == ".world") {
-                world_files.push_back(entry.path());
-            }
+    for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() == ".world") {
+            if (entry.path().stem() == "globe") continue;
+            world_files.push_back(entry.path());
         }
     }
 
     if (!world_files.empty()) {
         std::sort(world_files.begin(), world_files.end());
+        const bool has_nested_world = std::any_of(world_files.begin(), world_files.end(), [&](const fs::path& p) {
+            return p.parent_path() != dir;
+        });
+
+        std::unordered_map<std::string, fs::path> preferred_by_parent;
         for (const auto& wf : world_files) {
-            loadWorldFile(wf.string(), wf.stem().string());
+            const fs::path parent = wf.parent_path();
+            if (parent == dir) continue;
+            if (wf.stem() == parent.filename()) {
+                preferred_by_parent[parent.string()] = wf;
+            }
+        }
+
+        for (const auto& wf : world_files) {
+            const fs::path parent = wf.parent_path();
+            if (has_nested_world && parent == dir) continue;
+            auto pit = preferred_by_parent.find(parent.string());
+            if (pit != preferred_by_parent.end() && pit->second != wf) continue;
+
+            std::string inferred_name = wf.stem().string();
+            if (parent != dir && !parent.filename().empty()) {
+                inferred_name = parent.filename().string();
+            }
+            if (auto gp = parseGridPos(inferred_name); gp.has_value()) {
+                world_grid_pos_[inferred_name] = *gp;
+            }
+            loadWorldFile(wf.string(), inferred_name);
         }
         return;
     }
 
     // Fallback: raw TMX directory mode.
-    for (const auto& entry : fs::directory_iterator(world_dir)) {
+    const std::string inferred_world_name =
+        dir.filename().empty() ? default_world_name_ : dir.filename().string();
+    for (const auto& entry : fs::recursive_directory_iterator(world_dir)) {
         if (!entry.is_regular_file()) continue;
         if (entry.path().extension() != ".tmx") continue;
 
@@ -88,8 +126,8 @@ void World::loadDirectory(const std::string& world_dir) {
         if (!room->loadFromFile(fname)) continue;
 
         Placement pl;
-        pl.world_name = default_world_name_;
-        pl.room_name = default_world_name_ + ":" + room->get_name();
+        pl.world_name = inferred_world_name;
+        pl.room_name = inferred_world_name + ":" + room->get_name();
         pl.world_x = 0;
         pl.world_y = 0;
         pl.tile_w = room->tile_width();
@@ -102,7 +140,11 @@ void World::loadDirectory(const std::string& world_dir) {
         addAlias(first_room_alias_, room->get_name(), pl.room_name);
         _world[pl.room_name] = std::move(room);
         placements_[pl.room_name] = std::move(pl);
-        if (default_room_name_.empty() || default_room_name_ == "d1.tmx") default_room_name_ = _world.begin()->first;
+        if (entry.path().filename() == "0.tmx") {
+            world_level0_room_[inferred_world_name] = pl.room_name;
+        }
+        if (default_room_name_.empty() || default_room_name_ == "0.tmx") default_room_name_ = _world.begin()->first;
+        if (default_world_name_ == "floor") default_world_name_ = inferred_world_name;
     }
 }
 
@@ -140,6 +182,7 @@ void World::loadWorldFile(const std::string& world_file, const std::string& worl
         const int floor_num = findIntField(json, "floor", -999999);
         if (floor_num != -999999) effective_world_name = std::to_string(floor_num);
     }
+    if (default_world_name_ == "floor") default_world_name_ = effective_world_name;
     std::regex map_obj_re("\\{[^{}]*\\\"fileName\\\"[^{}]*\\}");
     auto begin = std::sregex_iterator(json.begin(), json.end(), map_obj_re);
     auto end = std::sregex_iterator();
@@ -154,6 +197,7 @@ void World::loadWorldFile(const std::string& world_file, const std::string& worl
             fs::path alt = wp.parent_path().parent_path() / rel_file;
             if (fs::exists(alt)) map_path = alt;
         }
+        if (map_path.extension() != ".tmx") continue;
         std::cout << "Loading File: " << map_path.string() << std::endl;
 
         auto room = std::make_unique<Room>();
@@ -179,6 +223,12 @@ void World::loadWorldFile(const std::string& world_file, const std::string& worl
 
         addAlias(first_room_alias_, base_name, qualified_name);
         addAlias(first_room_alias_, effective_world_name + ":" + base_name, qualified_name);
+        if (base_name == "0.tmx") {
+            world_level0_room_[effective_world_name] = qualified_name;
+        }
+        if (auto gp = parseGridPos(effective_world_name); gp.has_value()) {
+            world_grid_pos_[effective_world_name] = *gp;
+        }
 
         for (const std::string key : {"room", "id", "name", "room_id", "room_name", "alias"}) {
             auto it = room->properties().find(key);
@@ -298,6 +348,50 @@ bool World::resolveEdgeTransition(const std::string& current_room,
         return true;
     }
 
+    // Position-coded worlds: only level-0 is allowed to edge-transition across worlds.
+    const auto gp_it = world_grid_pos_.find(cur.world_name);
+    if (gp_it != world_grid_pos_.end()) {
+        if (cur_room->get_name() != "0.tmx") return false;
+
+        int target_gx = gp_it->second.first;
+        int target_gy = gp_it->second.second;
+        if (attempted_x < 0) {
+            target_gx -= 1;
+        } else if (attempted_x >= cur.map_w) {
+            target_gx += 1;
+        } else if (attempted_y < 0) {
+            target_gy += 1;
+        } else if (attempted_y >= cur.map_h) {
+            target_gy -= 1;
+        }
+
+        const std::string target_world =
+            std::to_string(target_gx) + "_" + std::to_string(target_gy);
+        auto l0_it = world_level0_room_.find(target_world);
+        if (l0_it == world_level0_room_.end()) return false;
+
+        auto pl_it = placements_.find(l0_it->second);
+        if (pl_it == placements_.end()) return false;
+        const Placement& dst = pl_it->second;
+
+        out_room = l0_it->second;
+        if (attempted_x < 0) {
+            out_x = std::max(0, dst.map_w - 1);
+            out_y = clampInt(attempted_y, 0, std::max(0, dst.map_h - 1));
+        } else if (attempted_x >= cur.map_w) {
+            out_x = 0;
+            out_y = clampInt(attempted_y, 0, std::max(0, dst.map_h - 1));
+        } else if (attempted_y < 0) {
+            out_x = clampInt(attempted_x, 0, std::max(0, dst.map_w - 1));
+            out_y = std::max(0, dst.map_h - 1);
+        } else {
+            out_x = clampInt(attempted_x, 0, std::max(0, dst.map_w - 1));
+            out_y = 0;
+        }
+        return true;
+    }
+
+    // Legacy fallback for non grid-positioned worlds only.
     const int world_px = cur.world_x + attempted_x * cur.tile_w;
     const int world_py = cur.world_y + attempted_y * cur.tile_h;
 

@@ -57,7 +57,7 @@ static int runServer(uint16_t port) {
     std::cout << "[server] listening on port " << port << "\n";
 
     Room room;
-    if (!room.loadFromFile("data/rooms/d1.tmx")) return 1;
+    if (!room.loadFromFile("data/worlds/500_500/rooms/0.tmx")) return 1;
 
     while (true) {
         ENetEvent ev{};

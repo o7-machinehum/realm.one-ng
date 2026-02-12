@@ -1,0 +1,19 @@
+{
+    "type": "world",
+    "maps": [
+        {
+            "fileName": "500_500/rooms/0.tmx",
+            "x": 0,
+            "y": 0,
+            "width": 480,
+            "height": 320
+        },
+        {
+            "fileName": "501_500/rooms/0.tmx",
+            "x": 480,
+            "y": 0,
+            "width": 480,
+            "height": 320
+        }
+    ]
+}

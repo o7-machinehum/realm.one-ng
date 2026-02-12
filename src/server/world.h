@@ -6,13 +6,14 @@
 #include <vector>
 #include <optional>
 #include <unordered_map>
+#include <utility>
 
 #include "room.h"
 
 // Container for all the rooms in the world
 class World {
     std::map<std::string, std::unique_ptr<Room>> _world;
-    std::string default_room_name_{"d1.tmx"};
+    std::string default_room_name_{"0.tmx"};
     struct Placement {
         std::string world_name;
         std::string room_name;
@@ -27,6 +28,8 @@ class World {
     };
     std::map<std::string, Placement> placements_;
     std::unordered_map<std::string, std::string> first_room_alias_;
+    std::unordered_map<std::string, std::pair<int, int>> world_grid_pos_;
+    std::unordered_map<std::string, std::string> world_level0_room_;
     std::string default_world_name_{"floor"};
 
     void loadDirectory(const std::string& world_dir);

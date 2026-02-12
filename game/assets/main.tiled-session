@@ -3,8 +3,11 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "/home/machinehum/the_island/data/rooms/d2.tmx",
+    "activeFile": "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx",
     "expandedProjectPaths": [
+        "/home/machinehum/the_island/data/worlds/realm_one",
+        "/home/machinehum/the_island/data/worlds",
+        "/home/machinehum/the_island/data/rooms",
         ".",
         "art"
     ],
@@ -34,12 +37,24 @@
                 "y": 165
             }
         },
+        "/home/machinehum/the_island/data/game/assets/art/cave.tsx": {
+            "scaleInDock": 1
+        },
+        "/home/machinehum/the_island/data/game/assets/art/materials2.tsx": {
+            "scaleInDock": 1
+        },
+        "/home/machinehum/the_island/data/game/assets/art/npc_test.tsx": {
+            "scaleInDock": 1
+        },
+        "/home/machinehum/the_island/data/game/assets/art/properties.tsx": {
+            "scaleInDock": 1
+        },
         "/home/machinehum/the_island/data/rooms/d1.tmx": {
             "scale": 3,
             "selectedLayer": 0,
             "viewCenter": {
                 "x": 250.16666666666666,
-                "y": 157.33333333333334
+                "y": 157.33333333333331
             }
         },
         "/home/machinehum/the_island/data/rooms/d2.tmx": {
@@ -47,7 +62,7 @@
                 11
             ],
             "scale": 4,
-            "selectedLayer": 1,
+            "selectedLayer": 6,
             "viewCenter": {
                 "x": 242.125,
                 "y": 170.5
@@ -60,7 +75,7 @@
             "scale": 2,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 200.25,
+                "x": 248.75,
                 "y": 156
             }
         },
@@ -68,10 +83,34 @@
             "scaleInDock": 1,
             "scaleInEditor": 1
         },
+        "/home/machinehum/the_island/data/worlds/realm_one/d1.tmx": {
+            "scale": 1.33890625,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 240.12136772085424,
+                "y": 392.1110981444743
+            }
+        },
+        "/home/machinehum/the_island/data/worlds/realm_one/d2.tmx": {
+            "scale": 1.33890625,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": -240.12136772085427,
+                "y": 285.3075037927413
+            }
+        },
+        "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx": {
+            "scale": 1.33890625,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 352.1531100478469,
+                "y": 96.34729840121366
+            }
+        },
         "art/cave.tsx": {
             "dynamicWrapping": false,
             "scaleInDock": 1.5,
-            "scaleInEditor": 5.5
+            "scaleInEditor": 4
         },
         "art/character.tsx": {
             "dynamicWrapping": false,
@@ -87,6 +126,7 @@
             "scaleInEditor": 4
         },
         "art/materials2.tsx": {
+            "scaleInDock": 2,
             "scaleInEditor": 4
         },
         "art/materials3.tsx": {
@@ -98,44 +138,51 @@
             "scaleInEditor": 4
         },
         "art/npc_test.tsx": {
+            "scaleInDock": 4,
             "scaleInEditor": 4
         },
+        "art/objects.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 3
+        },
         "art/properties.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 5.5
+        },
+        "art/speech.tsx": {
             "scaleInDock": 1,
             "scaleInEditor": 5.5
         }
     },
-    "last.externalTilesetPath": "/home/machinehum/projects/quick_game/game/assets/art",
+    "last.externalTilesetPath": "/home/machinehum/the_island/game/assets/art",
     "last.imagePath": "/home/machinehum/the_island/game/assets/art",
     "last.worldFilePath": "/home/machinehum/the_island/data/worlds",
     "loadedWorlds": [
-        "/home/machinehum/the_island/data/worlds/n1.world"
+        "/home/machinehum/the_island/data/worlds/globe.world"
     ],
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "openFiles": [
-        "art/character.tsx",
-        "art/cave.tsx",
-        "/home/machinehum/the_island/data/rooms/d2.tmx",
-        "/home/machinehum/the_island/data/rooms/n1_1.tmx",
-        "art/properties.tsx"
+        "/home/machinehum/the_island/data/worlds/realm_one/d1.tmx",
+        "/home/machinehum/the_island/data/worlds/realm_one/d2.tmx",
+        "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx"
     ],
     "project": "main.tiled-project",
     "property.type": "string",
     "recentFiles": [
+        "/home/machinehum/the_island/data/worlds/realm_one/d1.tmx",
+        "/home/machinehum/the_island/data/worlds/realm_one/d2.tmx",
+        "/home/machinehum/the_island/data/worlds/realm_one/n1_1.tmx",
+        "/home/machinehum/the_island/data/rooms/n1_1.tmx",
+        "art/speech.tsx",
+        "art/objects.tsx",
+        "/home/machinehum/the_island/data/rooms/d2.tmx",
+        "/home/machinehum/the_island/data/rooms/d1.tmx",
+        "art/cave.tsx",
         "/home/machinehum/the_island/data/rooms/objects.tsx",
         "art/materials2.tsx",
-        "art/materials1.tsx",
-        "art/materials3.tsx",
-        "art/materials4.tsx",
-        "art/character.tsx",
-        "art/npc_test.tsx",
-        "art/inner.tsx",
-        "/home/machinehum/the_island/data/rooms/n1_1.tmx",
-        "art/properties.tsx",
-        "art/cave.tsx",
-        "/home/machinehum/the_island/data/rooms/d2.tmx"
+        "art/materials1.tsx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {
