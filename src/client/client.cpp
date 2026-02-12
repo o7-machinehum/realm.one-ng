@@ -2,6 +2,7 @@
 
 #include "client_support.h"
 #include "client_ui_primitives.h"
+#include "client_game_ui.h"
 #include "client_inventory_ui.h"
 #include "client_layout.h"
 #include "client_scene_renderer.h"
@@ -39,29 +40,6 @@ constexpr float kInputOverlayMargin = 8.0f;
 constexpr float kInputTextOffsetX = 8.0f;
 constexpr float kInputTextOffsetY = 6.0f;
 constexpr float kInputFontSize = 19.0f;
-
-// Draws a compact labeled progress bar used by vitals/skills windows.
-void drawLabeledBar(Font font,
-                    const std::string& label,
-                    float x,
-                    float y,
-                    float w,
-                    float h,
-                    int value,
-                    int max_value,
-                    Color fill) {
-    DrawRectangle(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h), Color{30, 32, 36, 230});
-    DrawRectangleLines(static_cast<int>(x), static_cast<int>(y), static_cast<int>(w), static_cast<int>(h), Color{90, 100, 110, 255});
-    const float pct = (max_value > 0) ? std::max(0.0f, std::min(1.0f, static_cast<float>(value) / static_cast<float>(max_value))) : 0.0f;
-    const float fill_w = std::max(0.0f, (w - 2.0f) * pct);
-    DrawRectangle(static_cast<int>(x + 1), static_cast<int>(y + 1), static_cast<int>(fill_w), static_cast<int>(h - 2.0f), fill);
-    client::drawUiText(font,
-                       TextFormat("%s %d/%d", label.c_str(), value, max_value),
-                       x + 8.0f,
-                       y + 3.0f,
-                       14.0f,
-                       RAYWHITE);
-}
 
 // Parses raw chat input into a typed speech message.
 bool parseSpeechInput(const std::string& input, ChatMsg& out) {
@@ -435,8 +413,8 @@ int main(int argc, char** argv) {
                 const float bar_w = std::max(80.0f, vitals_frame.body_rect.width - pad * 2.0f);
                 const float bx = vitals_frame.body_rect.x + (vitals_frame.body_rect.width - bar_w) * 0.5f;
                 const float by = vitals_frame.body_rect.y + 10.0f;
-                drawLabeledBar(ui_font, "HP", bx, by, bar_w, 22.0f, game_state->your_hp, game_state->your_max_hp, Color{115, 38, 38, 255});
-                drawLabeledBar(ui_font, "MP", bx, by + 30.0f, bar_w, 22.0f, game_state->your_mana, game_state->your_max_mana, Color{50, 80, 160, 255});
+                client::drawLabeledBar(ui_font, "HP", bx, by, bar_w, 22.0f, game_state->your_hp, game_state->your_max_hp, 115, 38, 38, 255);
+                client::drawLabeledBar(ui_font, "MP", bx, by + 30.0f, bar_w, 22.0f, game_state->your_mana, game_state->your_max_mana, 50, 80, 160, 255);
             }
 
             client::InventoryUiOutput inv_out{};
@@ -499,13 +477,13 @@ int main(int argc, char** argv) {
                 const float bar_w = std::max(80.0f, skills_frame.body_rect.width - pad * 2.0f);
                 const float bx = skills_frame.body_rect.x + (skills_frame.body_rect.width - bar_w) * 0.5f;
                 float by = skills_frame.body_rect.y + 8.0f;
-                drawLabeledBar(ui_font, "Sword", bx, by, bar_w, 18.0f, 20, 100, Color{122, 89, 46, 255});
+                client::drawLabeledBar(ui_font, "Sword", bx, by, bar_w, 18.0f, 20, 100, 122, 89, 46, 255);
                 by += 23.0f;
-                drawLabeledBar(ui_font, "Shield", bx, by, bar_w, 18.0f, 18, 100, Color{80, 104, 142, 255});
+                client::drawLabeledBar(ui_font, "Shield", bx, by, bar_w, 18.0f, 18, 100, 80, 104, 142, 255);
                 by += 23.0f;
-                drawLabeledBar(ui_font, "Magic", bx, by, bar_w, 18.0f, 12, 100, Color{88, 66, 143, 255});
+                client::drawLabeledBar(ui_font, "Magic", bx, by, bar_w, 18.0f, 12, 100, 88, 66, 143, 255);
                 by += 23.0f;
-                drawLabeledBar(ui_font, "Range", bx, by, bar_w, 18.0f, 9, 100, Color{72, 126, 80, 255});
+                client::drawLabeledBar(ui_font, "Range", bx, by, bar_w, 18.0f, 9, 100, 72, 126, 80, 255);
             }
 
             if (inv_out.swap_msg.has_value()) {
@@ -534,28 +512,18 @@ int main(int argc, char** argv) {
             }
         }
 
-        const float input_h = kInputOverlayHeight;
-        const float input_y = static_cast<float>(play_y + play_h) - input_h - kInputOverlayMargin;
-        const Rectangle chat_input_rect{
-            static_cast<float>(play_x) + kInputOverlayMargin,
-            input_y,
-            static_cast<float>(play_w) - (kInputOverlayMargin * 2.0f),
-            input_h
-        };
-        client::drawUiPanel(chat_input_rect, Color{0, 0, 0, 150}, Color{90, 90, 90, 220}, 1.0f);
-        if (chat_input_active) {
-            SetMouseCursor(MOUSE_CURSOR_IBEAM);
-        }
-        const std::string prefix = chat_input_active ? "> " : "[Enter] Chat: ";
-        client::drawUiTextInputLine(ui_font,
-                                    input,
-                                    static_cast<float>(play_x) + kInputOverlayMargin + kInputTextOffsetX,
-                                    input_y + kInputTextOffsetY,
-                                    kInputFontSize,
-                                    prefix,
-                                    chat_input_active,
-                                    YELLOW,
-                                    LIGHTGRAY);
+        client::drawChatInputOverlay(ui_font,
+                                     play_x,
+                                     play_y,
+                                     play_w,
+                                     play_h,
+                                     kInputOverlayMargin,
+                                     kInputOverlayHeight,
+                                     kInputTextOffsetX,
+                                     kInputTextOffsetY,
+                                     kInputFontSize,
+                                     input,
+                                     chat_input_active);
 
         EndDrawing();
     }

@@ -36,6 +36,7 @@ target_link_libraries(qg_common PUBLIC
 add_executable(client
     src/client/client.cpp
     src/client/auth_ui.cpp
+    src/client/client_game_ui.cpp
     src/client/client_ui_primitives.cpp
     src/client/client_layout.cpp
     src/client/client_support.cpp
