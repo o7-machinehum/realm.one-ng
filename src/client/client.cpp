@@ -561,6 +561,7 @@ int main(int argc, char** argv) {
     }
 
     nc.stop();
+    client::shutdownAuthUi(auth_ui);
     client::unloadSheetCache(monster_sheet_cache);
     client::unloadSheetCache(item_sheet_cache);
     if (owns_ui_font) UnloadFont(ui_font);

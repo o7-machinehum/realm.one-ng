@@ -1,6 +1,7 @@
 #pragma once
 
 #include "msg.h"
+#include "raylib.h"
 
 #include <deque>
 #include <string>
@@ -22,10 +23,13 @@ struct AuthUiState {
     std::string create_name;
     std::string auth_message;
     std::vector<std::string> local_users;
+    Texture2D login_bg_tex{};
+    bool login_bg_ready = false;
 };
 
 // Initializes auth UI state from local key files.
 void initAuthUi(AuthUiState& state);
+void shutdownAuthUi(AuthUiState& state);
 
 // Applies a server login result and updates auth UI state/logs.
 void onAuthLoginResult(AuthUiState& state,

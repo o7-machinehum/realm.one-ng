@@ -82,6 +82,18 @@ namespace client {
 void initAuthUi(AuthUiState& state) {
     state = AuthUiState{};
     state.local_users = listLocalKeyUsernames();
+    if (FileExists("game/assets/ui/login_bg.png")) {
+        state.login_bg_tex = LoadTexture("game/assets/ui/login_bg.png");
+        state.login_bg_ready = state.login_bg_tex.id != 0;
+    }
+}
+
+void shutdownAuthUi(AuthUiState& state) {
+    if (state.login_bg_ready && state.login_bg_tex.id != 0) {
+        UnloadTexture(state.login_bg_tex);
+    }
+    state.login_bg_ready = false;
+    state.login_bg_tex = Texture2D{};
 }
 
 void onAuthLoginResult(AuthUiState& state,
@@ -114,13 +126,26 @@ bool tickAndDrawAuthUi(AuthUiState& state,
     BeginDrawing();
     ClearBackground(BLACK);
 
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 24, 255});
-    const Rectangle panel{
-        (GetScreenWidth() - 640.0f) * 0.5f,
-        (GetScreenHeight() - 360.0f) * 0.5f,
-        640.0f,
-        360.0f
-    };
+    if (state.login_bg_ready) {
+        const float sw = static_cast<float>(GetScreenWidth());
+        const float sh = static_cast<float>(GetScreenHeight());
+        const float tw = static_cast<float>(state.login_bg_tex.width);
+        const float th = static_cast<float>(state.login_bg_tex.height);
+        const float scale = std::max(sw / tw, sh / th);
+        const float dw = tw * scale;
+        const float dh = th * scale;
+        Rectangle src{0.0f, 0.0f, tw, th};
+        Rectangle dst{(sw - dw) * 0.5f, (sh - dh) * 0.5f, dw, dh};
+        DrawTexturePro(state.login_bg_tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, 95});
+    } else {
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 24, 255});
+    }
+    const float panel_w = 640.0f;
+    const float panel_h = 360.0f;
+    const float panel_x = 24.0f;
+    const float panel_y = std::max(24.0f, static_cast<float>(GetScreenHeight()) - panel_h - 24.0f);
+    const Rectangle panel{panel_x, panel_y, panel_w, panel_h};
     drawUiPanel(panel, Color{24, 28, 36, 250}, Color{88, 100, 126, 255}, 2.0f);
     DrawTextEx(ui_font, "The Island", Vector2{panel.x + 24.0f, panel.y + 20.0f}, 36.0f, 1.0f, RAYWHITE);
     DrawTextEx(ui_font, "Name", Vector2{panel.x + 24.0f, panel.y + 86.0f}, 22.0f, 1.0f, LIGHTGRAY);
