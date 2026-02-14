@@ -507,25 +507,38 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         }
     }
 
-    // Tile property blocking from TSX applies across all collision-relevant
-    // layers. If any checked layer marks a tile non_walkable=true, the tile blocks.
-    for (const auto& layer : layers_) {
-        if (isCollisionMetadataLayerName(layer.name)) continue;
-        for (int y = 0; y < map_h_; ++y) {
-            for (int x = 0; x < map_w_; ++x) {
+    // Tile property walkability resolves from top-most painted tile downward.
+    // This lets a walkable overlay tile (for example, a bridge) override a
+    // non-walkable base tile beneath it.
+    for (int y = 0; y < map_h_; ++y) {
+        for (int x = 0; x < map_w_; ++x) {
+            const size_t idx = (size_t)y * (size_t)map_w_ + (size_t)x;
+            if (walkable_mask_[idx] == 0) continue; // explicit Block layer remains authoritative
+
+            for (int li = static_cast<int>(layers_.size()) - 1; li >= 0; --li) {
+                const auto& layer = layers_[static_cast<size_t>(li)];
+                if (layer.name == "Block") continue;
+                if (isCollisionMetadataLayerName(layer.name)) continue;
+
                 const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
                 if (raw == 0) continue;
                 const uint32_t gid = raw & 0x1FFFFFFFu; // strip TMX flip flags
 
                 const int tsi = findTsIndexByGid(gid);
-                if (tsi < 0 || tsi >= static_cast<int>(ts_walk_props.size())) continue;
+                if (tsi < 0 || tsi >= static_cast<int>(ts_walk_props.size())) {
+                    walkable_mask_[idx] = 1;
+                    break;
+                }
+
                 const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
                 auto it = ts_walk_props[tsi].find(local);
-                if (it == ts_walk_props[tsi].end()) continue;
-
-                if (!it->second) {
-                    walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] = 0;
+                if (it == ts_walk_props[tsi].end()) {
+                    walkable_mask_[idx] = 1;
+                    break;
                 }
+
+                walkable_mask_[idx] = it->second ? 1 : 0;
+                break;
             }
         }
     }

@@ -90,6 +90,7 @@ Required CMake packages/modules:
 - Default tiles are walkable.
 - Blocking is explicit via tile property `non_walkable=true` (legacy `not_walkable=true` still accepted).
 - `Block` layer with non-zero gids also blocks.
+- Tile-property walkability resolves top-down by layer order (top-most non-empty tile wins), so bridge-like overlays can be walkable over blocked base tiles.
 - Absence of `non_walkable` does not imply blocked.
 
 ### Monster spawn + behavior
