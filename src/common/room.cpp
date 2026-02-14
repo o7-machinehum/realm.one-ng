@@ -30,6 +30,19 @@ static std::string trimStr(std::string s) {
     return s;
 }
 
+static std::string normalizedLayerName(const std::string& in) {
+    std::string out = trimStr(in);
+    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return out;
+}
+
+static bool isCollisionMetadataLayerName(const std::string& name) {
+    const std::string n = normalizedLayerName(name);
+    return n == "monsters" || n == "items" || n == "npcs";
+}
+
 static std::vector<uint32_t> parseCsvU32(const char* text) {
     std::vector<uint32_t> out;
     if (!text) return out;
@@ -80,18 +93,33 @@ static std::map<int, bool> loadWalkableTileProps(const std::filesystem::path& ts
             const char* pname = p->Attribute("name");
             if (!pname) continue;
 
+            auto parse_bool_text = [](const char* raw, bool& v) -> bool {
+                if (!raw) return false;
+                std::string s = trimStr(raw);
+                if (s.empty()) return false;
+                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+                if (s == "1" || s == "true" || s == "yes" || s == "on") {
+                    v = true;
+                    return true;
+                }
+                if (s == "0" || s == "false" || s == "no" || s == "off") {
+                    v = false;
+                    return true;
+                }
+                return false;
+            };
+
             auto read_bool = [&](bool& v) -> bool {
+                const char* value_attr = p->Attribute("value");
+                if (parse_bool_text(value_attr, v)) return true;
                 if (p->QueryBoolAttribute("value", &v) == XML_SUCCESS) return true;
                 const char* txt = p->GetText();
-                if (!txt) return false;
-                std::string s = txt;
-                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return (char)std::tolower(c); });
-                v = (s == "1" || s == "true" || s == "yes");
+                if (!parse_bool_text(txt, v)) return false;
                 return true;
             };
 
             bool b = false;
-            if (std::strcmp(pname, "not_walkable") == 0 || std::strcmp(pname, "non_walkable") == 0) {
+            if (std::strcmp(pname, "non_walkable") == 0) {
                 if (read_bool(b)) out[id] = !b;
             } else {
                 continue;
@@ -440,28 +468,6 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     if (tilesets_.empty()) return false;
     if (layers_.empty()) return false;
 
-    // ---- walkability mask ----
-    std::vector<int8_t> walk_override((size_t)map_w_ * (size_t)map_h_, -1); // -1 unset, 0 blocked, 1 walkable
-
-    // Tile property overrides from TSX (e.g., non_walkable=true in properties.tsx).
-    for (const auto& layer : layers_) {
-        for (int y = 0; y < map_h_; ++y) {
-            for (int x = 0; x < map_w_; ++x) {
-                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
-                if (raw == 0) continue;
-                const uint32_t gid = raw & 0x1FFFFFFFu; // strip TMX flip flags
-
-                const int tsi = findTsIndexByGid(gid);
-                if (tsi < 0 || tsi >= static_cast<int>(ts_walk_props.size())) continue;
-                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
-                auto it = ts_walk_props[tsi].find(local);
-                if (it == ts_walk_props[tsi].end()) continue;
-
-                walk_override[(size_t)y * (size_t)map_w_ + (size_t)x] = it->second ? 1 : 0;
-            }
-        }
-    }
-
     // Default semantics: everything is walkable unless explicitly blocked.
     walkable_mask_.assign((size_t)map_w_ * (size_t)map_h_, 1);
 
@@ -478,12 +484,25 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         }
     }
 
-    // Explicit TSX walkable overrides are final.
-    for (int y = 0; y < map_h_; ++y) {
-        for (int x = 0; x < map_w_; ++x) {
-            const int8_t ov = walk_override[(size_t)y * (size_t)map_w_ + (size_t)x];
-            if (ov >= 0) {
-                walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] = static_cast<uint8_t>(ov);
+    // Tile property blocking from TSX applies across all collision-relevant
+    // layers. If any checked layer marks a tile non_walkable=true, the tile blocks.
+    for (const auto& layer : layers_) {
+        if (isCollisionMetadataLayerName(layer.name)) continue;
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (raw == 0) continue;
+                const uint32_t gid = raw & 0x1FFFFFFFu; // strip TMX flip flags
+
+                const int tsi = findTsIndexByGid(gid);
+                if (tsi < 0 || tsi >= static_cast<int>(ts_walk_props.size())) continue;
+                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
+                auto it = ts_walk_props[tsi].find(local);
+                if (it == ts_walk_props[tsi].end()) continue;
+
+                if (!it->second) {
+                    walkable_mask_[(size_t)y * (size_t)map_w_ + (size_t)x] = 0;
+                }
             }
         }
     }

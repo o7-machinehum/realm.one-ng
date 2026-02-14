@@ -91,11 +91,11 @@
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 4,
-            "selectedLayer": 1,
+            "scale": 5.5,
+            "selectedLayer": 14,
             "viewCenter": {
-                "x": 224.5,
-                "y": -120.25
+                "x": 315.45454545454544,
+                "y": 94.36363636363636
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
@@ -103,10 +103,10 @@
                 14
             ],
             "scale": 5.5,
-            "selectedLayer": 1,
+            "selectedLayer": 15,
             "viewCenter": {
-                "x": 222,
-                "y": 194.54545454545456
+                "x": 213.8181818181818,
+                "y": 241.8181818181818
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx": {
@@ -116,24 +116,24 @@
             "scale": 2.8826562499999997,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 240.05637161905796,
-                "y": 159.9219469889967
+                "x": 327.82264621388697,
+                "y": 155.41221746436122
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx": {
-            "scale": 1.5,
+            "scale": 4,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": -159.33333333333331,
-                "y": 156
+                "x": 196,
+                "y": 135
             }
         },
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx": {
             "scale": 2,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": -192.75,
-                "y": 146
+                "x": 201.5,
+                "y": 193.5
             }
         },
         "/home/machinehum/the_island/data/worlds/game/assets/art/cave.tsx": {

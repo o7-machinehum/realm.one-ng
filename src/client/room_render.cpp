@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 
 using namespace tinyxml2;
 
@@ -26,12 +27,23 @@ bool isMetadataLayerName(const std::string& name) {
 
 bool isUnderEntityLayerName(const std::string& name) {
     const std::string n = normalizedLayerName(name);
-    return n == "floor" || n == "l1" || n == "l2";
+    if (n == "floor") return true; // legacy support
+    if (n.size() < 2 || n[0] != 'l') return false;
+    const char* num = n.c_str() + 1;
+    char* end = nullptr;
+    const long v = std::strtol(num, &end, 10);
+    if (!end || *end != '\0') return false;
+    return v >= 0 && v <= 5;
 }
 
 bool isAboveEntityLayerName(const std::string& name) {
     const std::string n = normalizedLayerName(name);
-    return n == "l3" || n == "l4";
+    if (n.size() < 2 || n[0] != 'l') return false;
+    const char* num = n.c_str() + 1;
+    char* end = nullptr;
+    const long v = std::strtol(num, &end, 10);
+    if (!end || *end != '\0') return false;
+    return v >= 6;
 }
 } // namespace
 
