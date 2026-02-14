@@ -2,8 +2,8 @@
 
 #include "auth_db.h"
 #include "auth_crypto.h"
+#include "global_settings.h"
 #include "item_defs.h"
-#include "monster_combat.h"
 #include "monster_defs.h"
 #include "npc_defs.h"
 #include "server_runtime.h"
@@ -25,10 +25,13 @@ constexpr int kMaxMoveStep = 1;
 constexpr int kMeleeRangeTiles = 1;
 constexpr int kThrowRangeTiles = 5;
 constexpr int kInventoryLimit = 8;
-constexpr int kCombatDamagePerTick = 6;
 constexpr int kTickMs = 500;
 constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick
-constexpr int kNpcTalkRangeTiles = 8;
+constexpr int kNpcTalkRangeTiles = 10;
+constexpr int kCombatOutcomeNone = 0;
+constexpr int kCombatOutcomeHit = 1;
+constexpr int kCombatOutcomeMissed = 2;
+constexpr int kCombatOutcomeBlocked = 3;
 
 void sendWire(ENetPeer* peer,
               uint8_t channel,
@@ -102,11 +105,104 @@ std::vector<EquippedItemMsg> toEquippedMsgVec(const std::unordered_map<std::stri
     return out;
 }
 
+int expNeededForLevel(const ProgressionSettings& p, int level) {
+    const int l = std::max(1, level);
+    const int need = p.exp_per_level_a * l * l + p.exp_per_level_b * l + p.exp_per_level_c;
+    return std::max(1, need);
+}
+
+struct LevelInfo {
+    int level = 1;
+    int xp_into_level = 0;
+    int xp_to_next = 100;
+};
+
+LevelInfo levelInfoFromXp(const ProgressionSettings& p, int xp_total) {
+    LevelInfo info{};
+    int remaining = std::max(0, xp_total);
+    int level = 1;
+    while (level < 10000) {
+        const int need = expNeededForLevel(p, level);
+        if (remaining < need) {
+            info.level = level;
+            info.xp_into_level = remaining;
+            info.xp_to_next = need;
+            return info;
+        }
+        remaining -= need;
+        level += 1;
+    }
+    info.level = level;
+    info.xp_into_level = 0;
+    info.xp_to_next = expNeededForLevel(p, level);
+    return info;
+}
+
+int equippedBonus(const PersistedPlayer& p,
+                 const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id,
+                 int ItemDef::*member_ptr) {
+    auto findDef = [&](const std::string& raw) -> const ItemDef* {
+        auto it = item_defs_by_id.find(normalizeId(raw));
+        if (it != item_defs_by_id.end() && it->second) return it->second;
+        return nullptr;
+    };
+    int sum = 0;
+    for (const auto& [_, inv_idx] : p.equipment_by_type) {
+        if (inv_idx < 0 || inv_idx >= static_cast<int>(p.inventory.size())) continue;
+        const ItemDef* def = findDef(p.inventory[(size_t)inv_idx]);
+        if (!def) continue;
+        sum += def->*member_ptr;
+    }
+    return sum;
+}
+
+int clampPercent(int p) {
+    if (p < 0) return 0;
+    if (p > 95) return 95;
+    return p;
+}
+
+bool rollPercent(int p) {
+    const int n = clampPercent(p);
+    return (std::rand() % 100) < n;
+}
+
+void setCombatOutcome(PlayerRuntime& p, int outcome) {
+    p.combat_outcome = outcome;
+    if (outcome != kCombatOutcomeHit) p.combat_value = 0;
+    if (outcome != kCombatOutcomeNone) p.combat_outcome_seq += 1;
+}
+
+void setCombatOutcome(MonsterRuntime& m, int outcome) {
+    m.combat_outcome = outcome;
+    if (outcome != kCombatOutcomeHit) m.combat_value = 0;
+    if (outcome != kCombatOutcomeNone) m.combat_outcome_seq += 1;
+}
+
+void setCombatHit(PlayerRuntime& p, int value) {
+    p.combat_outcome = kCombatOutcomeHit;
+    p.combat_value = std::max(0, value);
+    p.combat_outcome_seq += 1;
+}
+
+void setCombatHit(MonsterRuntime& m, int value) {
+    m.combat_outcome = kCombatOutcomeHit;
+    m.combat_value = std::max(0, value);
+    m.combat_outcome_seq += 1;
+}
+
+int maxHpForLevel(int level) {
+    const int l = std::max(1, level);
+    return 100 + (l - 1) * 15;
+}
+
 GameStateMsg makeGameState(const PlayerRuntime& self,
                            const std::unordered_map<ENetPeer*, PlayerRuntime>& players,
                            const std::vector<MonsterRuntime>& monsters,
                            const std::vector<NpcRuntime>& npcs,
                            const std::vector<GroundItemRuntime>& items,
+                           const GlobalSettings& settings,
+                           const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id,
                            std::string event_text) {
     GameStateMsg gs;
     gs.your_user = self.data.username;
@@ -118,6 +214,45 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
     gs.your_max_hp = self.max_hp;
     gs.your_mana = self.mana;
     gs.your_max_mana = self.max_mana;
+    const LevelInfo lvl = levelInfoFromXp(settings.progression, self.data.exp);
+    const LevelInfo melee = levelInfoFromXp(settings.progression, self.data.melee_xp);
+    const LevelInfo distance = levelInfoFromXp(settings.progression, self.data.distance_xp);
+    const LevelInfo magic = levelInfoFromXp(settings.progression, self.data.magic_xp);
+    const LevelInfo shielding = levelInfoFromXp(settings.progression, self.data.shielding_xp);
+    const LevelInfo evasion = levelInfoFromXp(settings.progression, self.data.evasion_xp);
+    const int equip_attack = equippedBonus(self.data, item_defs_by_id, &ItemDef::attack);
+    const int equip_defense = equippedBonus(self.data, item_defs_by_id, &ItemDef::defense);
+    const int equip_evasion = equippedBonus(self.data, item_defs_by_id, &ItemDef::evasion);
+    const int trait_hit = melee.level;
+    const int trait_block = shielding.level;
+    const int trait_evade = evasion.level;
+    const int trait_armor = std::max(0, equip_defense);
+    const int trait_attack = std::max(1, trait_hit + equip_attack);
+    gs.your_level = lvl.level;
+    gs.your_exp = lvl.xp_into_level;
+    gs.your_exp_to_next_level = lvl.xp_to_next;
+    gs.skill_melee_level = melee.level;
+    gs.skill_melee_xp = melee.xp_into_level;
+    gs.skill_melee_xp_to_next = melee.xp_to_next;
+    gs.skill_distance_level = distance.level;
+    gs.skill_distance_xp = distance.xp_into_level;
+    gs.skill_distance_xp_to_next = distance.xp_to_next;
+    gs.skill_magic_level = magic.level;
+    gs.skill_magic_xp = magic.xp_into_level;
+    gs.skill_magic_xp_to_next = magic.xp_to_next;
+    gs.skill_shielding_level = shielding.level;
+    gs.skill_shielding_xp = shielding.xp_into_level;
+    gs.skill_shielding_xp_to_next = shielding.xp_to_next;
+    gs.skill_evasion_level = evasion.level;
+    gs.skill_evasion_xp = evasion.xp_into_level;
+    gs.skill_evasion_xp_to_next = evasion.xp_to_next;
+    gs.derived_defence = std::max(1, trait_block + trait_armor);
+    gs.derived_offence = std::max(1, trait_attack);
+    gs.derived_evasion = std::max(1, trait_evade + equip_evasion);
+    gs.trait_attack = trait_attack;
+    gs.trait_shielding = std::max(1, trait_block);
+    gs.trait_evasion = std::max(1, trait_evade + equip_evasion);
+    gs.trait_armor = trait_armor;
     gs.your_equipment = toEquippedMsgVec(self.data.equipment_by_type, self.data.inventory);
     gs.attack_target_monster_id = self.attack_target_monster_id;
     gs.inventory = self.data.inventory;
@@ -139,6 +274,9 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
         ps.max_mana = p.max_mana;
         ps.facing = p.facing;
         ps.attack_anim_seq = p.attack_anim_seq;
+        ps.combat_outcome = p.combat_outcome;
+        ps.combat_outcome_seq = p.combat_outcome_seq;
+        ps.combat_value = p.combat_value;
         ps.equipment = toEquippedMsgVec(p.data.equipment_by_type, p.data.inventory);
         gs.players.push_back(std::move(ps));
     }
@@ -146,7 +284,7 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
     for (const auto& m : monsters) {
         if (m.room != self.data.room) continue;
         gs.monsters.push_back(MonsterStateMsg{
-            m.id, m.name, m.sprite_tileset, m.sprite_name, m.size_w, m.size_h, m.room, m.x, m.y, m.hp, m.max_hp, m.facing, m.attack_anim_seq
+            m.id, m.name, m.sprite_tileset, m.sprite_name, m.size_w, m.size_h, m.room, m.x, m.y, m.hp, m.max_hp, m.facing, m.attack_anim_seq, m.combat_outcome, m.combat_outcome_seq, m.combat_value
         });
     }
 
@@ -211,6 +349,11 @@ void NetServer::recvLoop() {
 
     std::unordered_map<ENetPeer*, PlayerRuntime> players;
     std::vector<MonsterRuntime> monsters;
+    struct MonsterRespawnEntry {
+        MonsterRuntime mon;
+        int remaining_ms = 0;
+    };
+    std::vector<MonsterRespawnEntry> pending_monster_respawns;
     std::vector<NpcRuntime> npcs;
     std::vector<GroundItemRuntime> items;
     int next_monster_id = 1;
@@ -238,6 +381,7 @@ void NetServer::recvLoop() {
     if (item_defs_by_id.empty()) {
         std::cerr << "[server] warning: no item defs found in game/items\n";
     }
+    const GlobalSettings global_settings = loadGlobalSettings("data/global.toml");
 
     auto spawnItemById = [&](const std::string& raw_item_id,
                              const std::string& room_name,
@@ -308,27 +452,35 @@ void NetServer::recvLoop() {
                 continue;
             }
 
-            monsters.push_back(MonsterRuntime{
-                next_monster_id++,
-                def.id,
-                spawn.name_override.empty() ? def.name : spawn.name_override,
-                def.sprite_tileset,
-                def.id,
-                room_name,
-                spawn.x,
-                spawn.y,
-                sw,
-                sh,
-                def.max_hp,
-                def.max_hp,
-                std::max(1, def.strength),
-                kDefaultFacingSouth,
-                0,
-                std::max(1, def.speed_ms),
-                0,
-                def.exp_reward,
-                def.drops
-            });
+            MonsterRuntime mon{};
+            mon.id = next_monster_id++;
+            mon.def_id = def.id;
+            mon.name = spawn.name_override.empty() ? def.name : spawn.name_override;
+            mon.sprite_tileset = def.sprite_tileset;
+            mon.sprite_name = def.id;
+            mon.room = room_name;
+            mon.x = spawn.x;
+            mon.y = spawn.y;
+            mon.spawn_x = spawn.x;
+            mon.spawn_y = spawn.y;
+            mon.size_w = sw;
+            mon.size_h = sh;
+            mon.hp = def.max_hp;
+            mon.max_hp = def.max_hp;
+            mon.strength = std::max(1, def.strength);
+            mon.defense = std::max(0, def.defense);
+            mon.evasion = std::max(0, def.evasion);
+            mon.accuracy = std::max(1, std::min(100, def.accuracy));
+            mon.block_chance = std::max(0, std::min(95, def.block_chance));
+            mon.facing = kDefaultFacingSouth;
+            mon.attack_anim_seq = 0;
+            mon.combat_outcome = kCombatOutcomeNone;
+            mon.combat_outcome_seq = 0;
+            mon.speed_ms = std::max(1, def.speed_ms);
+            mon.move_accum_ms = 0;
+            mon.exp_reward = def.exp_reward;
+            mon.drops = def.drops;
+            monsters.push_back(std::move(mon));
         }
         for (const auto& spawn : room->item_spawns()) {
             if (!room->isWalkable(spawn.x, spawn.y)) {
@@ -406,10 +558,39 @@ void NetServer::recvLoop() {
     auto broadcastState = [&](const std::string& event_text) {
         for (const auto& [peer, p] : players) {
             if (!p.authenticated) continue;
-            auto gs = makeGameState(p, players, monsters, npcs, items, event_text);
+            auto gs = makeGameState(p, players, monsters, npcs, items, global_settings, item_defs_by_id, event_text);
             sendWire(peer, 0, pack(MsgType::GameState, gs));
         }
         enet_host_flush(server);
+    };
+
+    auto playerDerivedDefence = [&](const PlayerRuntime& p) -> int {
+        const int skill = levelInfoFromXp(global_settings.progression, p.data.shielding_xp).level;
+        return std::max(1, skill);
+    };
+    auto playerDerivedArmor = [&](const PlayerRuntime& p) -> int {
+        const int equip = equippedBonus(p.data, item_defs_by_id, &ItemDef::defense);
+        return std::max(0, equip);
+    };
+    auto playerDerivedOffence = [&](const PlayerRuntime& p) -> int {
+        const int melee = levelInfoFromXp(global_settings.progression, p.data.melee_xp).level;
+        const int equip = equippedBonus(p.data, item_defs_by_id, &ItemDef::attack);
+        return std::max(1, melee + equip);
+    };
+    auto playerDerivedEvasion = [&](const PlayerRuntime& p) -> int {
+        const int skill = levelInfoFromXp(global_settings.progression, p.data.evasion_xp).level;
+        const int equip = equippedBonus(p.data, item_defs_by_id, &ItemDef::evasion);
+        return std::max(1, skill + equip);
+    };
+    auto updatePlayerVitalsFromLevel = [&](PlayerRuntime& p) {
+        const int lvl = levelInfoFromXp(global_settings.progression, p.data.exp).level;
+        const int desired_max_hp = maxHpForLevel(lvl);
+        if (p.max_hp != desired_max_hp) {
+            const int delta = desired_max_hp - p.max_hp;
+            p.max_hp = desired_max_hp;
+            if (delta > 0) p.hp += delta;
+        }
+        p.hp = std::max(0, std::min(p.hp, p.max_hp));
     };
 
     auto monsterOccupies = [](const MonsterRuntime& m, int tx, int ty) -> bool {
@@ -637,7 +818,7 @@ void NetServer::recvLoop() {
                 std::cout << "[server] connect from ";
                 printPeerIp(ev.peer->address);
                 std::cout << "\n";
-                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, -1};
+                players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, kCombatOutcomeNone, 0, -1};
             }
 
             else if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
@@ -646,7 +827,7 @@ void NetServer::recvLoop() {
 
                     auto pit = players.find(ev.peer);
                     if (pit == players.end()) {
-                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, -1};
+                        players[ev.peer] = PlayerRuntime{ev.peer, false, PersistedPlayer{}, 100, 100, 60, 60, 2, 0, kCombatOutcomeNone, 0, -1};
                         pit = players.find(ev.peer);
                     }
                     PlayerRuntime& player = pit->second;
@@ -685,8 +866,11 @@ void NetServer::recvLoop() {
                                 player.authenticated = true;
                                 player.data = std::move(persisted);
                                 pruneEquipmentForInventory(player);
+                                updatePlayerVitalsFromLevel(player);
                                 player.hp = player.max_hp;
                                 player.mana = player.max_mana;
+                                player.combat_outcome = kCombatOutcomeNone;
+                                player.combat_outcome_seq = 0;
                                 player.attack_target_monster_id = -1;
 
                                 std::cout << "[server] LOGIN user=" << player.data.username
@@ -1102,6 +1286,14 @@ void NetServer::recvLoop() {
 
             for (auto& [_, p] : players) {
                 if (!p.authenticated) continue;
+                const int before_max = p.max_hp;
+                const int before_hp = p.hp;
+                updatePlayerVitalsFromLevel(p);
+                if (p.max_hp != before_max || p.hp != before_hp) changed = true;
+            }
+
+            for (auto& [_, p] : players) {
+                if (!p.authenticated) continue;
                 if (p.attack_target_monster_id < 0) continue;
 
                 int hit_index = -1;
@@ -1134,13 +1326,41 @@ void NetServer::recvLoop() {
                 mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
                 mon.attack_anim_seq += 1;
 
-                const int dmg = kCombatDamagePerTick;
+                const int melee_level = levelInfoFromXp(global_settings.progression, p.data.melee_xp).level;
+                const int offence = playerDerivedOffence(p);
+                const int miss_chance = std::max(3, std::min(70, 18 + mon.evasion * 2 - melee_level - mon.accuracy / 8));
+                const int block_chance = std::max(0, std::min(75, mon.block_chance + mon.defense - offence / 4));
+                int outcome = kCombatOutcomeHit;
+                if (rollPercent(miss_chance)) outcome = kCombatOutcomeMissed;
+                else if (rollPercent(block_chance)) outcome = kCombatOutcomeBlocked;
+
+                if (outcome == kCombatOutcomeMissed) {
+                    setCombatOutcome(p, kCombatOutcomeMissed);
+                    setCombatOutcome(mon, kCombatOutcomeNone);
+                    changed = true;
+                    tick_event = p.data.username + " whiffed " + mon.name;
+                    continue;
+                }
+                if (outcome == kCombatOutcomeBlocked) {
+                    setCombatOutcome(p, kCombatOutcomeNone);
+                    setCombatOutcome(mon, kCombatOutcomeBlocked);
+                    p.data.shielding_xp += 1;
+                    changed = true;
+                    tick_event = mon.name + " blocked " + p.data.username;
+                    continue;
+                }
+
+                const int dmg = std::max(1, 2 + melee_level / 2 + offence / 2 - mon.defense / 3);
+                setCombatOutcome(p, kCombatOutcomeNone);
+                setCombatHit(mon, dmg);
                 mon.hp = std::max(0, mon.hp - dmg);
+                p.data.melee_xp += 3;
                 changed = true;
-                tick_event = p.data.username + " hits " + mon.name + " for " + std::to_string(dmg);
+                tick_event = p.data.username + " hit " + mon.name + " for " + std::to_string(dmg);
 
                 if (mon.hp <= 0) {
                     p.data.exp += mon.exp_reward;
+                    p.data.melee_xp += std::max(1, mon.exp_reward / 2);
                     p.attack_target_monster_id = -1;
                     items.push_back(GroundItemRuntime{
                         next_item_id++,
@@ -1160,6 +1380,10 @@ void NetServer::recvLoop() {
                         if (!rollChance(drop.chance)) continue;
                         spawnItemById(drop.item_id, mon.room, mon.x, mon.y);
                     }
+                    pending_monster_respawns.push_back(MonsterRespawnEntry{
+                        mon,
+                        std::max(0, global_settings.gameplay.monster_respawn_ms)
+                    });
                     tick_event = p.data.username + " killed " + mon.name + " (exp +" + std::to_string(mon.exp_reward) + ")";
                     monsters.erase(monsters.begin() + hit_index);
                     savePlayerNow(p);
@@ -1259,18 +1483,119 @@ void NetServer::recvLoop() {
                 }
             }
 
-            const MonsterCombatResult monster_combat = resolveMonsterAttacks(
-                players,
-                monsters,
-                findRespawnTile,
-                kMeleeRangeTiles
-            );
-            if (monster_combat.changed) changed = true;
-            if (!monster_combat.event_text.empty()) tick_event = monster_combat.event_text;
-            for (ENetPeer* defeated_peer : monster_combat.defeated_players) {
-                auto pit = players.find(defeated_peer);
+            for (auto& mon : monsters) {
+                if (mon.hp <= 0) continue;
+
+                ENetPeer* target_peer = nullptr;
+                int best_dist = 999999;
+                for (auto& [peer, p] : players) {
+                    if (!p.authenticated) continue;
+                    if (p.data.room != mon.room) continue;
+                    const int dist = std::abs(mon.x - p.data.x) + std::abs(mon.y - p.data.y);
+                    if (dist > kMeleeRangeTiles) continue;
+                    if (dist >= best_dist) continue;
+                    best_dist = dist;
+                    target_peer = peer;
+                }
+                if (!target_peer) continue;
+                auto pit = players.find(target_peer);
                 if (pit == players.end()) continue;
-                savePlayerNow(pit->second);
+                auto& p = pit->second;
+
+                mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
+                mon.attack_anim_seq += 1;
+
+                const int defence = playerDerivedDefence(p);
+                const int armor = playerDerivedArmor(p);
+                const int evasion = playerDerivedEvasion(p);
+                const int miss_chance = std::max(3, std::min(70, 18 + evasion * 2 - mon.accuracy / 2));
+                const int block_chance = std::max(0, std::min(80, 8 + defence * 3 - mon.strength));
+                int outcome = kCombatOutcomeHit;
+                if (rollPercent(miss_chance)) outcome = kCombatOutcomeMissed;
+                else if (rollPercent(block_chance)) outcome = kCombatOutcomeBlocked;
+
+                if (outcome == kCombatOutcomeMissed) {
+                    setCombatOutcome(mon, kCombatOutcomeNone);
+                    setCombatOutcome(p, kCombatOutcomeNone);
+                    p.data.evasion_xp += 1;
+                    changed = true;
+                    if (tick_event.empty()) tick_event = mon.name + " missed " + p.data.username;
+                    continue;
+                }
+                if (outcome == kCombatOutcomeBlocked) {
+                    setCombatOutcome(mon, kCombatOutcomeNone);
+                    setCombatOutcome(p, kCombatOutcomeBlocked);
+                    p.data.shielding_xp += 2;
+                    changed = true;
+                    if (tick_event.empty()) tick_event = p.data.username + " blocked " + mon.name;
+                    continue;
+                }
+
+                setCombatOutcome(mon, kCombatOutcomeNone);
+
+                const int raw = std::max(1, mon.strength + mon.accuracy / 10);
+                const int reduced = raw - std::max(0, armor / 2);
+                const int damage = std::max(1, reduced);
+                setCombatHit(p, damage);
+                p.hp = std::max(0, p.hp - damage);
+                changed = true;
+                if (tick_event.empty()) tick_event = mon.name + " hit " + p.data.username + " for " + std::to_string(damage);
+
+                if (p.hp <= 0) {
+                    p.attack_target_monster_id = -1;
+                    p.hp = p.max_hp;
+                    p.mana = p.max_mana;
+                    int rx = 0;
+                    int ry = 0;
+                    if (findRespawnTile(p.data.room, rx, ry)) {
+                        p.data.x = rx;
+                        p.data.y = ry;
+                    }
+                    savePlayerNow(p);
+                    tick_event = p.data.username + " was defeated by " + mon.name;
+                }
+            }
+
+            for (size_t i = 0; i < pending_monster_respawns.size();) {
+                auto& entry = pending_monster_respawns[i];
+                entry.remaining_ms -= static_cast<int>(tick_dt.count());
+                if (entry.remaining_ms > 0) {
+                    ++i;
+                    continue;
+                }
+
+                MonsterRuntime respawned = entry.mon;
+                const int rx = respawned.spawn_x;
+                const int ry = respawned.spawn_y;
+                const std::string room_name = respawned.room;
+                const Room* room = world_.getRoom(room_name);
+                if (!room) {
+                    pending_monster_respawns.erase(pending_monster_respawns.begin() + static_cast<long>(i));
+                    continue;
+                }
+                if (!room->isWalkable(rx, ry) ||
+                    occupiedByMonster(room_name, rx, ry) ||
+                    occupiedByNpc(room_name, rx, ry) ||
+                    occupiedByPlayer(nullptr, room_name, rx, ry)) {
+                    entry.remaining_ms = 1000;
+                    ++i;
+                    continue;
+                }
+
+                respawned.id = next_monster_id++;
+                respawned.x = rx;
+                respawned.y = ry;
+                respawned.hp = respawned.max_hp;
+                respawned.facing = kDefaultFacingSouth;
+                respawned.attack_anim_seq = 0;
+                respawned.combat_outcome = kCombatOutcomeNone;
+                respawned.combat_outcome_seq = 0;
+                respawned.combat_value = 0;
+                respawned.move_accum_ms = 0;
+                monsters.push_back(std::move(respawned));
+                pending_monster_respawns.erase(pending_monster_respawns.begin() + static_cast<long>(i));
+                changed = true;
+                if (tick_event.empty()) tick_event = "a monster respawned";
             }
 
             if (changed) {

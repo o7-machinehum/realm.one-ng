@@ -2,13 +2,26 @@
 #include "client_ui_primitives.h"
 
 #include <algorithm>
+#include <cctype>
 
 namespace client {
 
 namespace {
-bool isEquipType(const std::string& t) {
-    return t == "Weapon" || t == "Armor" || t == "Shield" ||
-           t == "Legs" || t == "Boots" || t == "Helmet";
+std::string canonicalEquipType(std::string t) {
+    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    if (t == "weapon") return "Weapon";
+    if (t == "armor") return "Armor";
+    if (t == "shield") return "Shield";
+    if (t == "legs") return "Legs";
+    if (t == "boots") return "Boots";
+    if (t == "helmet") return "Helmet";
+    return {};
+}
+
+bool isEquipType(const std::string& raw) {
+    return !canonicalEquipType(raw).empty();
 }
 
 } // namespace
@@ -62,11 +75,11 @@ void drawInventoryUi(Font ui_font,
         const Vector2 m = GetMousePosition();
         const int slot = findInventorySlotAt(m);
         if (slot >= 0 && slot < inv_count) {
-            const std::string type = resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[slot]) : std::string{};
+            const std::string type = canonicalEquipType(resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[slot]) : std::string{});
             if (isEquipType(type)) {
                 bool already_equipped = false;
                 for (const auto& eq : game_state.your_equipment) {
-                    if (eq.equip_type != type) continue;
+                    if (canonicalEquipType(eq.equip_type) != type) continue;
                     if (eq.inventory_index == slot) {
                         already_equipped = true;
                     }
@@ -103,9 +116,9 @@ void drawInventoryUi(Font ui_font,
         };
         bool equipped = false;
         if (i < inv_count) {
-            const std::string type = resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[i]) : std::string{};
+            const std::string type = canonicalEquipType(resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[i]) : std::string{});
             for (const auto& eq : game_state.your_equipment) {
-                if (eq.equip_type == type && eq.inventory_index == i) {
+                if (canonicalEquipType(eq.equip_type) == type && eq.inventory_index == i) {
                     equipped = true;
                     break;
                 }

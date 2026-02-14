@@ -71,6 +71,7 @@ add_executable(server
     src/server/world.cpp
     src/server/monster_defs.cpp
     src/server/npc_defs.cpp
+    src/server/global_settings.cpp
     src/server/item_defs.cpp
     src/server/auth_db.cpp
 )

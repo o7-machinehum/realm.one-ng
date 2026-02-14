@@ -166,11 +166,14 @@ struct PlayerStateMsg {
     int max_mana = 0;
     int facing = 2; // 0=N,1=E,2=S,3=W
     uint32_t attack_anim_seq = 0;
+    int combat_outcome = 0; // 0 none, 1 hit, 2 missed, 3 blocked
+    uint32_t combat_outcome_seq = 0;
+    int combat_value = 0; // damage value when combat_outcome is hit
     std::vector<EquippedItemMsg> equipment;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(user, room, x, y, exp, hp, max_hp, mana, max_mana, facing, attack_anim_seq, equipment);
+        ar(user, room, x, y, exp, hp, max_hp, mana, max_mana, facing, attack_anim_seq, combat_outcome, combat_outcome_seq, combat_value, equipment);
     }
 };
 
@@ -188,10 +191,13 @@ struct MonsterStateMsg {
     int max_hp = 0;
     int facing = 2; // 0=N,1=E,2=S,3=W
     uint32_t attack_anim_seq = 0;
+    int combat_outcome = 0; // 0 none, 1 hit, 2 missed, 3 blocked
+    uint32_t combat_outcome_seq = 0;
+    int combat_value = 0; // damage value when combat_outcome is hit
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, room, x, y, hp, max_hp, facing, attack_anim_seq);
+        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, room, x, y, hp, max_hp, facing, attack_anim_seq, combat_outcome, combat_outcome_seq, combat_value);
     }
 };
 
@@ -241,6 +247,30 @@ struct GameStateMsg {
     int your_max_hp = 0;
     int your_mana = 0;
     int your_max_mana = 0;
+    int your_level = 1;
+    int your_exp_to_next_level = 100;
+    int skill_melee_level = 1;
+    int skill_melee_xp = 0;
+    int skill_melee_xp_to_next = 100;
+    int skill_distance_level = 1;
+    int skill_distance_xp = 0;
+    int skill_distance_xp_to_next = 100;
+    int skill_magic_level = 1;
+    int skill_magic_xp = 0;
+    int skill_magic_xp_to_next = 100;
+    int skill_shielding_level = 1;
+    int skill_shielding_xp = 0;
+    int skill_shielding_xp_to_next = 100;
+    int skill_evasion_level = 1;
+    int skill_evasion_xp = 0;
+    int skill_evasion_xp_to_next = 100;
+    int derived_defence = 1;
+    int derived_offence = 1;
+    int derived_evasion = 1;
+    int trait_attack = 1;
+    int trait_shielding = 1;
+    int trait_evasion = 1;
+    int trait_armor = 0;
     std::vector<EquippedItemMsg> your_equipment;
     int attack_target_monster_id = -1;
     std::vector<std::string> inventory;
@@ -253,6 +283,14 @@ struct GameStateMsg {
     template <class Ar>
     void serialize(Ar& ar) {
         ar(your_user, your_room, your_x, your_y, your_exp, your_hp, your_max_hp, your_mana, your_max_mana,
+           your_level, your_exp_to_next_level,
+           skill_melee_level, skill_melee_xp, skill_melee_xp_to_next,
+           skill_distance_level, skill_distance_xp, skill_distance_xp_to_next,
+           skill_magic_level, skill_magic_xp, skill_magic_xp_to_next,
+           skill_shielding_level, skill_shielding_xp, skill_shielding_xp_to_next,
+           skill_evasion_level, skill_evasion_xp, skill_evasion_xp_to_next,
+           derived_defence, derived_offence, derived_evasion,
+           trait_attack, trait_shielding, trait_evasion, trait_armor,
            your_equipment, attack_target_monster_id, inventory, players, monsters, npcs, items, event_text);
     }
 };

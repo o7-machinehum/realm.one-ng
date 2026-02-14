@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 
+#include <tinyxml2.h>
 #include "rlgl.h"
 
 namespace client {
@@ -17,6 +18,10 @@ constexpr float kSpeechTextPadX = 8.0f;
 constexpr float kSpeechTextPadY = 6.0f;
 constexpr float kUiBaseW = 1200.0f;
 constexpr float kUiBaseH = 760.0f;
+constexpr float kCombatFxDurationSec = 0.95f;
+constexpr float kCombatFxOpacity = 0.60f;
+constexpr float kCombatFxYOffsetPx = 5.0f;
+constexpr int kCombatOutcomeHit = 1;
 
 float uiScreenScale() {
     const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
@@ -313,11 +318,110 @@ std::pair<float, float> smoothPos(std::unordered_map<std::string, std::pair<floa
     return it->second;
 }
 
+struct CombatFxAtlas {
+    int columns = 40;
+    int tile_w = 16;
+    int tile_h = 16;
+    std::vector<int> hit_frames;
+    std::vector<int> wiff_frames;
+    std::vector<int> block_frames;
+    bool loaded = false;
+};
+
+std::vector<int> makeFramesFromSeqPairs(std::vector<std::pair<int, int>> seq_pairs, int fallback_anchor) {
+    if (seq_pairs.empty()) return {std::max(0, fallback_anchor)};
+    std::sort(seq_pairs.begin(), seq_pairs.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first) return a.first < b.first;
+        return a.second < b.second;
+    });
+    std::vector<int> out;
+    out.reserve(seq_pairs.size());
+    for (const auto& [_, tile_id] : seq_pairs) out.push_back(tile_id);
+    return out;
+}
+
+const CombatFxAtlas& combatFxAtlas() {
+    static CombatFxAtlas atlas{};
+    if (atlas.loaded) return atlas;
+    atlas.loaded = true;
+
+    tinyxml2::XMLDocument doc;
+    if (doc.LoadFile("game/assets/art/properties.tsx") != tinyxml2::XML_SUCCESS) {
+        atlas.hit_frames = {0, 1, 2};
+        atlas.wiff_frames = {40, 41, 42};
+        atlas.block_frames = {80, 81, 82};
+        return atlas;
+    }
+
+    const tinyxml2::XMLElement* root = doc.FirstChildElement("tileset");
+    if (!root) return atlas;
+    if (const char* c = root->Attribute("columns")) atlas.columns = std::max(1, std::atoi(c));
+    if (const char* tw = root->Attribute("tilewidth")) atlas.tile_w = std::max(1, std::atoi(tw));
+    if (const char* th = root->Attribute("tileheight")) atlas.tile_h = std::max(1, std::atoi(th));
+
+    std::vector<std::pair<int, int>> hit_seq_pairs;
+    std::vector<std::pair<int, int>> wiff_seq_pairs;
+    std::vector<std::pair<int, int>> block_seq_pairs;
+    std::string last_desc;
+    for (const tinyxml2::XMLElement* tile = root->FirstChildElement("tile");
+         tile != nullptr;
+         tile = tile->NextSiblingElement("tile")) {
+        int tile_id = -1;
+        tile->QueryIntAttribute("id", &tile_id);
+        if (tile_id < 0) continue;
+
+        std::string desc;
+        int seq_idx = -1;
+        const tinyxml2::XMLElement* props = tile->FirstChildElement("properties");
+        if (props) {
+            for (const tinyxml2::XMLElement* p = props->FirstChildElement("property");
+                 p != nullptr;
+                 p = p->NextSiblingElement("property")) {
+                const char* name = p->Attribute("name");
+                const char* value = p->Attribute("value");
+                if (!name || !value) continue;
+                std::string n = name;
+                std::transform(n.begin(), n.end(), n.begin(), [](unsigned char ch) {
+                    return static_cast<char>(std::tolower(ch));
+                });
+                if (n == "description") desc = value;
+                else if (n == "seq") {
+                    try { seq_idx = std::stoi(value); } catch (...) {}
+                } else if (n == "sequence") {
+                    // Backward compatibility: allow sequence index or count.
+                    try { seq_idx = std::stoi(value); } catch (...) {}
+                }
+            }
+        }
+        if (!desc.empty()) {
+            std::transform(desc.begin(), desc.end(), desc.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            last_desc = desc;
+        } else if (seq_idx >= 0 && !last_desc.empty()) {
+            desc = last_desc;
+        }
+        if (desc.empty()) continue;
+        std::string key = desc;
+        if (seq_idx < 0) seq_idx = static_cast<int>(tile_id);
+        if (key == "hit") hit_seq_pairs.push_back({seq_idx, tile_id});
+        else if (key == "wiff" || key == "whiff" || key == "miss") wiff_seq_pairs.push_back({seq_idx, tile_id});
+        else if (key == "block" || key == "blocked") block_seq_pairs.push_back({seq_idx, tile_id});
+    }
+
+    atlas.hit_frames = makeFramesFromSeqPairs(std::move(hit_seq_pairs), 0);
+    atlas.wiff_frames = makeFramesFromSeqPairs(std::move(wiff_seq_pairs), 40);
+    atlas.block_frames = makeFramesFromSeqPairs(std::move(block_seq_pairs), 80);
+    return atlas;
+}
+
 void drawScene(const Room& room,
                const GameStateMsg& game_state,
                const Sprites& sprites,
                Texture2D character_tex,
                bool sprite_ready,
+               Texture2D combat_fx_tex,
+               bool combat_fx_ready,
                Texture2D speech_tex,
                bool speech_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
@@ -431,6 +535,16 @@ void drawScene(const Room& room,
         } else {
             attack_t = std::max(0.0f, attack_t - dt);
         }
+        auto& last_outcome_seq = scene_state.last_combat_outcome_seq_by_key[key];
+        auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
+        if (last_outcome_seq != m.combat_outcome_seq) {
+            last_outcome_seq = m.combat_outcome_seq;
+            outcome_fx.outcome = m.combat_outcome;
+            outcome_fx.value = m.combat_value;
+            outcome_fx.timer = (m.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
+        } else {
+            outcome_fx.timer = std::max(0.0f, outcome_fx.timer - dt);
+        }
         const bool action_active = target_in_range && (m.id == game_state.attack_target_monster_id);
         tickAnimation(anim, *mon_sprites, moved, action_active || attack_t > 0.0f, dt);
         prev = {m.x, m.y};
@@ -500,6 +614,16 @@ void drawScene(const Room& room,
             attack_t = 0.35f;
         } else {
             attack_t = std::max(0.0f, attack_t - dt);
+        }
+        auto& last_outcome_seq = scene_state.last_combat_outcome_seq_by_key[key];
+        auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
+        if (last_outcome_seq != p.combat_outcome_seq) {
+            last_outcome_seq = p.combat_outcome_seq;
+            outcome_fx.outcome = p.combat_outcome;
+            outcome_fx.value = p.combat_value;
+            outcome_fx.timer = (p.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
+        } else {
+            outcome_fx.timer = std::max(0.0f, outcome_fx.timer - dt);
         }
         tickAnimation(anim, sprites, (dx != 0 || dy != 0), attack_t > 0.0f, dt);
         prev = {p.x, p.y};
@@ -667,10 +791,61 @@ void drawScene(const Room& room,
         }
     }
 
+    auto drawCombatOutcomeFx = [&](const std::string& key, float feet_x, float feet_y) {
+        auto it = scene_state.combat_outcome_fx_by_key.find(key);
+        if (it == scene_state.combat_outcome_fx_by_key.end()) return;
+        const SceneState::CombatOutcomeFx& fx = it->second;
+        if (!combat_fx_ready || combat_fx_tex.id == 0) return;
+        if (fx.timer <= 0.0f || fx.outcome <= 0) return;
+        const CombatFxAtlas& atlas = combatFxAtlas();
+        const float t = std::max(0.0f, std::min(1.0f, fx.timer / kCombatFxDurationSec));
+        const std::vector<int>* frames = nullptr;
+        if (fx.outcome == 1) frames = &atlas.hit_frames;
+        else if (fx.outcome == 2) frames = &atlas.wiff_frames;
+        else if (fx.outcome == 3) frames = &atlas.block_frames;
+        if (!frames || frames->empty()) return;
+        const float p = 1.0f - t;
+        const int idx = std::max(0, std::min(static_cast<int>(frames->size()) - 1,
+                                             static_cast<int>(std::floor(p * static_cast<float>(frames->size())))));
+        const int tile_id = (*frames)[static_cast<size_t>(idx)];
+        const int tx = tile_id % std::max(1, atlas.columns);
+        const int ty = tile_id / std::max(1, atlas.columns);
+        Rectangle src{
+            static_cast<float>(tx * atlas.tile_w),
+            static_cast<float>(ty * atlas.tile_h),
+            static_cast<float>(atlas.tile_w),
+            static_cast<float>(atlas.tile_h)
+        };
+        const float sz = std::max(tile_w, tile_h) * 1.1f;
+        const float px = feet_x - sz * 0.5f;
+        const float py = feet_y - tile_h * 1.40f + kCombatFxYOffsetPx;
+        Rectangle dst{px, py, sz, sz};
+        Color tint = WHITE;
+        tint.a = static_cast<unsigned char>(255.0f * kCombatFxOpacity);
+        DrawTexturePro(combat_fx_tex, src, dst, Vector2{0, 0}, 0.0f, tint);
+        if (fx.outcome == kCombatOutcomeHit && fx.value > 0) {
+            const std::string dmg = std::to_string(fx.value);
+            const float font_size = std::max(14.0f, 16.0f * uiScreenScale());
+            const Vector2 ts = MeasureTextEx(ui_font, dmg.c_str(), font_size, 1.0f);
+            const float progress = 1.0f - t;
+            const float rise_px = progress * 34.0f;
+            Color c{235, 48, 48, static_cast<unsigned char>(255.0f * t)};
+            drawUiText(ui_font,
+                       dmg,
+                       feet_x - ts.x * 0.5f,
+                       py - ts.y - 2.0f - rise_px,
+                       font_size,
+                       c);
+        }
+    };
+
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
         const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 10.0f;
         drawHealthBar(mv.click_box.x, bar_y, mv.click_box.width, m.hp, m.max_hp);
+        drawCombatOutcomeFx("m:" + std::to_string(m.id),
+                            mv.rx * tile_w + mv.click_box.width * 0.5f,
+                            mv.ry * tile_h + tile_h * 0.5f);
         const float label_size = cfg.monster_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, m.name.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - (label_size + 3.0f), label_size, ORANGE);
@@ -682,6 +857,7 @@ void drawScene(const Room& room,
         const float y = pv.ry * tile_h + tile_h * 0.5f;
         Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 10.0f, tile_w, 5.0f};
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
+        drawCombatOutcomeFx("p:" + p.user, x, y);
         const float label_size = cfg.player_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);

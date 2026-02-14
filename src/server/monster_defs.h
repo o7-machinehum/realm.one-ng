@@ -16,6 +16,10 @@ struct MonsterDef {
     int monster_size_h = 1;    // in 16px tiles
     int max_hp = 30;
     int strength = 6;
+    int defense = 2;
+    int evasion = 2;
+    int accuracy = 60;     // 1..100
+    int block_chance = 8;  // 0..95
     int speed_ms = 500;
     int exp_reward = 10;
     std::vector<MonsterDropDef> drops;

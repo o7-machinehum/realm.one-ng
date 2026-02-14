@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 
@@ -92,6 +93,37 @@ std::unordered_map<std::string, int> splitEquipment(const std::string& s) {
     return out;
 }
 
+std::string joinSkills(const PersistedPlayer& p) {
+    std::ostringstream oss;
+    oss << "melee=" << p.melee_xp
+        << "|distance=" << p.distance_xp
+        << "|magic=" << p.magic_xp
+        << "|shielding=" << p.shielding_xp
+        << "|evasion=" << p.evasion_xp;
+    return oss.str();
+}
+
+void splitSkills(const std::string& s, PersistedPlayer& p) {
+    if (s.empty()) return;
+    std::string token;
+    std::istringstream iss(s);
+    while (std::getline(iss, token, '|')) {
+        if (token.empty()) continue;
+        const auto eq = token.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string k = token.substr(0, eq);
+        const std::string v = token.substr(eq + 1);
+        if (k.empty() || v.empty()) continue;
+        int n = 0;
+        try { n = std::stoi(v); } catch (...) { continue; }
+        if (k == "melee") p.melee_xp = std::max(0, n);
+        else if (k == "distance") p.distance_xp = std::max(0, n);
+        else if (k == "magic") p.magic_xp = std::max(0, n);
+        else if (k == "shielding") p.shielding_xp = std::max(0, n);
+        else if (k == "evasion") p.evasion_xp = std::max(0, n);
+    }
+}
+
 } // namespace
 
 AuthDb::AuthDb(const std::string& db_path) {
@@ -113,6 +145,7 @@ AuthDb::AuthDb(const std::string& db_path) {
     ensureColumn(db_, "players", "y", "INTEGER NOT NULL DEFAULT 10");
     ensureColumn(db_, "players", "inventory", "TEXT NOT NULL DEFAULT ''");
     ensureColumn(db_, "players", "equipment", "TEXT NOT NULL DEFAULT ''");
+    ensureColumn(db_, "players", "skills", "TEXT NOT NULL DEFAULT ''");
 }
 
 AuthDb::~AuthDb() {
@@ -132,7 +165,7 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
     }
 
     sqlite3_stmt* select_stmt = nullptr;
-    const char* select_sql = "SELECT public_key, room, exp, x, y, inventory, equipment FROM players WHERE username = ?1;";
+    const char* select_sql = "SELECT public_key, room, exp, x, y, inventory, equipment, skills FROM players WHERE username = ?1;";
     if (sqlite3_prepare_v2(db_, select_sql, -1, &select_stmt, nullptr) != SQLITE_OK) {
         message = "database prepare failed";
         return false;
@@ -149,11 +182,13 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
         out_player.y = sqlite3_column_int(select_stmt, 4);
         const char* inv = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 5));
         const char* eqp = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 6));
+        const char* sks = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 7));
 
         const bool ok = (db_pub != nullptr) && (public_key_hex == db_pub);
         if (db_room) out_player.room = db_room;
         if (inv) out_player.inventory = splitInventory(inv);
         if (eqp) out_player.equipment_by_type = splitEquipment(eqp);
+        if (sks) splitSkills(sks, out_player);
 
         sqlite3_finalize(select_stmt);
 
@@ -198,18 +233,24 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
     out_player.exp = 0;
     out_player.x = 16;
     out_player.y = 10;
+    out_player.melee_xp = 0;
+    out_player.distance_xp = 0;
+    out_player.magic_xp = 0;
+    out_player.shielding_xp = 0;
+    out_player.evasion_xp = 0;
     out_player.inventory.clear();
 
     sqlite3_stmt* insert_stmt = nullptr;
     const char* insert_sql =
-        "INSERT INTO players(username, password, public_key, room, exp, x, y, inventory) "
-        "VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7);";
+        "INSERT INTO players(username, password, public_key, room, exp, x, y, inventory, skills) "
+        "VALUES (?1, '', ?2, ?3, ?4, ?5, ?6, ?7, ?8);";
     if (sqlite3_prepare_v2(db_, insert_sql, -1, &insert_stmt, nullptr) != SQLITE_OK) {
         message = "database prepare failed";
         return false;
     }
 
     const std::string inv = joinInventory(out_player.inventory);
+    const std::string sks = joinSkills(out_player);
     sqlite3_bind_text(insert_stmt, 1, username.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(insert_stmt, 2, public_key_hex.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(insert_stmt, 3, out_player.room.c_str(), -1, SQLITE_TRANSIENT);
@@ -217,6 +258,7 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
     sqlite3_bind_int(insert_stmt, 5, out_player.x);
     sqlite3_bind_int(insert_stmt, 6, out_player.y);
     sqlite3_bind_text(insert_stmt, 7, inv.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(insert_stmt, 8, sks.c_str(), -1, SQLITE_TRANSIENT);
 
     const int insert_rc = sqlite3_step(insert_stmt);
     sqlite3_finalize(insert_stmt);
@@ -233,7 +275,7 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
 bool AuthDb::savePlayer(const PersistedPlayer& player) {
     sqlite3_stmt* stmt = nullptr;
     const char* sql =
-        "UPDATE players SET room = ?1, exp = ?2, x = ?3, y = ?4, inventory = ?5, equipment = ?6 WHERE username = ?7;";
+        "UPDATE players SET room = ?1, exp = ?2, x = ?3, y = ?4, inventory = ?5, equipment = ?6, skills = ?7 WHERE username = ?8;";
 
     if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) {
         return false;
@@ -241,13 +283,15 @@ bool AuthDb::savePlayer(const PersistedPlayer& player) {
 
     const std::string inv = joinInventory(player.inventory);
     const std::string eqp = joinEquipment(player.equipment_by_type);
+    const std::string sks = joinSkills(player);
     sqlite3_bind_text(stmt, 1, player.room.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 2, player.exp);
     sqlite3_bind_int(stmt, 3, player.x);
     sqlite3_bind_int(stmt, 4, player.y);
     sqlite3_bind_text(stmt, 5, inv.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 6, eqp.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 7, player.username.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 7, sks.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 8, player.username.c_str(), -1, SQLITE_TRANSIENT);
 
     const int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);

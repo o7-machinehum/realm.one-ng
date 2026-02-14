@@ -16,3 +16,9 @@ Each item template is one `.toml` file in this folder.
 4. Server spawns runtime items from those markers.
 
 Unknown keys in TOML are ignored, so designers can add extra stats safely.
+
+## Modifiers
+attack - This increases the amount of damage you can do when you do it.
+evasion - This increases your ability to dodge an attack, evade hit.
+shielding - This increases your ability of block, block hit.
+armor - This reduces the amount of damage when you are hit.

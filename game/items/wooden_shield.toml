@@ -3,7 +3,6 @@ sprite_tileset = "materials2.tsx"
 stackable = false
 item_type = "Shield"
 
-# Extra designer fields (optional):
-# attack = 6
-# value = 8
-# weight = 1
+armor = 2
+shielding = 2
+evasion = -1

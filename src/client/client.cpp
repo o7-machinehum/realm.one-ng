@@ -85,8 +85,10 @@ int main(int argc, char** argv) {
 
     Sprites sprites;
     Texture2D character_tex{};
+    Texture2D combat_fx_tex{};
     Texture2D speech_tex{};
     bool sprite_ready = false;
+    bool combat_fx_ready = false;
     bool speech_ready = false;
     Sprites::SizeOverrideMap player_size_overrides;
     player_size_overrides["player_1"] = {1, 2};
@@ -99,6 +101,8 @@ int main(int argc, char** argv) {
     Font ui_font = client::loadUIFont(owns_ui_font);
     speech_tex = LoadTexture("game/assets/art/speech.png");
     speech_ready = (speech_tex.id != 0);
+    combat_fx_tex = LoadTexture("game/assets/art/properties.png");
+    combat_fx_ready = (combat_fx_tex.id != 0);
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
@@ -264,7 +268,9 @@ int main(int argc, char** argv) {
             scene_state.render_pos_by_key.clear();
             scene_state.anim_by_key.clear();
             scene_state.last_attack_seq_by_key.clear();
+            scene_state.last_combat_outcome_seq_by_key.clear();
             scene_state.attack_fx_timer_by_key.clear();
+            scene_state.combat_outcome_fx_by_key.clear();
             scene_state.speech_text_by_user.clear();
             scene_state.speech_type_by_user.clear();
             scene_state.speech_timer_by_user.clear();
@@ -280,7 +286,9 @@ int main(int argc, char** argv) {
                 scene_state.render_pos_by_key.clear();
                 scene_state.anim_by_key.clear();
                 scene_state.last_attack_seq_by_key.clear();
+                scene_state.last_combat_outcome_seq_by_key.clear();
                 scene_state.attack_fx_timer_by_key.clear();
+                scene_state.combat_outcome_fx_by_key.clear();
                 scene_state.speech_text_by_user.clear();
                 scene_state.speech_type_by_user.clear();
                 scene_state.speech_timer_by_user.clear();
@@ -314,7 +322,7 @@ int main(int argc, char** argv) {
         const float right_x = static_cast<float>(GetScreenWidth()) - inventory_cfg.panel_w - kDockMarginRight;
         auto& vitals_window = client::ensureWindow(ui_windows_state, "vitals", "Health / Mana", Rectangle{right_x, kDockMarginTop, inventory_cfg.panel_w, 106.0f}, true);
         auto& inventory_window = client::ensureWindow(ui_windows_state, "inventory", "Inventory", Rectangle{right_x, 126.0f, inventory_cfg.panel_w, 420.0f}, true);
-        auto& skills_window = client::ensureWindow(ui_windows_state, "skills", "Skills", Rectangle{right_x, 556.0f, inventory_cfg.panel_w, 174.0f}, true);
+        auto& skills_window = client::ensureWindow(ui_windows_state, "skills", "Skills", Rectangle{right_x, 556.0f, inventory_cfg.panel_w, 320.0f}, true);
         constexpr int kInvSlotLimit = 8;
         const int inv_rows = std::max(1, (kInvSlotLimit + inventory_cfg.cols - 1) / inventory_cfg.cols);
         const float inv_body_h = 12.0f + inv_rows * inventory_cfg.slot_size + (inv_rows - 1) * inventory_cfg.gap + 12.0f;
@@ -387,6 +395,8 @@ int main(int argc, char** argv) {
                               sprites,
                               character_tex,
                               sprite_ready,
+                              combat_fx_tex,
+                              combat_fx_ready,
                               speech_tex,
                               speech_ready,
                               monster_sheet_view,
@@ -503,14 +513,73 @@ int main(int argc, char** argv) {
                 const float pad = 10.0f;
                 const float bar_w = std::max(80.0f, skills_frame.body_rect.width - pad * 2.0f);
                 const float bx = skills_frame.body_rect.x + (skills_frame.body_rect.width - bar_w) * 0.5f;
-                float by = skills_frame.body_rect.y + 8.0f;
-                client::drawLabeledBar(ui_font, "Sword", bx, by, bar_w, 18.0f, 20, 100, 122, 89, 46, 255);
-                by += 23.0f;
-                client::drawLabeledBar(ui_font, "Shield", bx, by, bar_w, 18.0f, 18, 100, 80, 104, 142, 255);
-                by += 23.0f;
-                client::drawLabeledBar(ui_font, "Magic", bx, by, bar_w, 18.0f, 12, 100, 88, 66, 143, 255);
-                by += 23.0f;
-                client::drawLabeledBar(ui_font, "Range", bx, by, bar_w, 18.0f, 9, 100, 72, 126, 80, 255);
+                float by = skills_frame.body_rect.y + 6.0f;
+                const float level_w = 24.0f;
+                const float row_h = 16.0f;
+                const float row_gap = 20.0f;
+                const float prog_x = bx + level_w;
+                const float prog_w = std::max(50.0f, bar_w - level_w);
+                const float label_size = 14.0f;
+                auto draw_skill = [&](const char* name,
+                                      int level,
+                                      int xp,
+                                      int xp_to_next,
+                                      int r,
+                                      int g,
+                                      int b) {
+                    client::drawUiText(ui_font,
+                                       std::to_string(std::max(1, level)),
+                                       bx,
+                                       by + 1.0f,
+                                       label_size,
+                                       Color{220, 225, 235, 255});
+                    client::drawLabeledBar(ui_font,
+                                           name,
+                                           prog_x,
+                                           by,
+                                           prog_w,
+                                           row_h,
+                                           xp,
+                                           std::max(1, xp_to_next),
+                                           r,
+                                           g,
+                                           b,
+                                           255);
+                    by += row_gap;
+                };
+                draw_skill("EXP", game_state->your_level, game_state->your_exp, std::max(1, game_state->your_exp_to_next_level), 153, 121, 60);
+                draw_skill("Hit", game_state->skill_melee_level, game_state->skill_melee_xp, game_state->skill_melee_xp_to_next, 128, 88, 42);
+                draw_skill("Block", game_state->skill_shielding_level, game_state->skill_shielding_xp, game_state->skill_shielding_xp_to_next, 72, 104, 144);
+                draw_skill("Evade", game_state->skill_evasion_level, game_state->skill_evasion_xp, game_state->skill_evasion_xp_to_next, 112, 112, 112);
+                draw_skill("Distance", game_state->skill_distance_level, game_state->skill_distance_xp, game_state->skill_distance_xp_to_next, 80, 126, 80);
+                draw_skill("Magic", game_state->skill_magic_level, game_state->skill_magic_xp, game_state->skill_magic_xp_to_next, 82, 72, 153);
+
+                const float txt_size = 14.0f;
+                const float y1 = std::max(by + 2.0f, skills_frame.body_rect.y + skills_frame.body_rect.height - 66.0f);
+                client::drawUiText(ui_font,
+                                   "Attack: " + std::to_string(game_state->trait_attack),
+                                   bx,
+                                   y1,
+                                   txt_size,
+                                   Color{255, 205, 164, 255});
+                client::drawUiText(ui_font,
+                                   "Shielding: " + std::to_string(game_state->trait_shielding),
+                                   bx,
+                                   y1 + 14.0f,
+                                   txt_size,
+                                   Color{190, 218, 255, 255});
+                client::drawUiText(ui_font,
+                                   "Evasion: " + std::to_string(game_state->trait_evasion),
+                                   bx,
+                                   y1 + 28.0f,
+                                   txt_size,
+                                   Color{225, 225, 225, 255});
+                client::drawUiText(ui_font,
+                                   "Armor: " + std::to_string(game_state->trait_armor),
+                                   bx,
+                                   y1 + 42.0f,
+                                   txt_size,
+                                   Color{203, 219, 177, 255});
             }
 
             if (inv_out.swap_msg.has_value()) {
@@ -560,6 +629,7 @@ int main(int argc, char** argv) {
     client::unloadSheetCache(monster_sheet_cache);
     client::unloadSheetCache(item_sheet_cache);
     if (owns_ui_font) UnloadFont(ui_font);
+    if (combat_fx_tex.id != 0) UnloadTexture(combat_fx_tex);
     if (speech_tex.id != 0) UnloadTexture(speech_tex);
     if (character_tex.id != 0) UnloadTexture(character_tex);
     CloseWindow();

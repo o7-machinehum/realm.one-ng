@@ -12,3 +12,14 @@ npc_name_text_size = 13
 
 # Speech text size (base px before automatic UI scaling).
 speech_text_size = 16
+
+[progression]
+# EXP needed from level L to L+1:
+# need(L) = a*L*L + b*L + c
+exp_per_level_a = 0
+exp_per_level_b = 50
+exp_per_level_c = 100
+
+[gameplay]
+# Dead monsters respawn after this delay (milliseconds).
+monster_respawn_ms = 15000

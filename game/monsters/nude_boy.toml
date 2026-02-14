@@ -8,9 +8,15 @@ sprite_tileset = "npc_test.tsx"
 monster_size = "1x2"
 
 max_hp = 30
-strength = 6
-speed_ms = 500
+
+attack = 6
+evasion = 2
+shielding = 3
+armor = 1
+
 exp_reward = 10
+speed_ms = 500
+
 
 [[drops]]
 item = "wooden_sword"

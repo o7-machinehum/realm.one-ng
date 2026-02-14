@@ -51,6 +51,18 @@ bool parseBool(const std::string& raw, bool& out) {
     return false;
 }
 
+bool parseInt(const std::string& raw, int& out) {
+    try {
+        size_t pos = 0;
+        const int v = std::stoi(raw, &pos);
+        if (pos != raw.size()) return false;
+        out = v;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
     std::ifstream in(p);
     if (!in) return false;
@@ -74,6 +86,12 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
         if (key == "name") out.name = parseStringValue(raw_val);
         else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
         else if (key == "item_type" || key == "equip_type" || key == "type" || key == "slot") out.item_type = parseStringValue(raw_val);
+        else if (key == "attack" || key == "offense" || key == "offence") { int v = out.attack; if (parseInt(raw_val, v)) out.attack = v; }
+        else if (key == "defense" || key == "defence" || key == "armor" || key == "armour" || key == "shielding") {
+            int v = out.defense;
+            if (parseInt(raw_val, v)) out.defense = v;
+        }
+        else if (key == "evasion") { int v = out.evasion; if (parseInt(raw_val, v)) out.evasion = v; }
         else if (key == "stackable") {
             bool b = out.stackable;
             if (parseBool(raw_val, b)) out.stackable = b;

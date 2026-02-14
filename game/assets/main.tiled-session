@@ -88,14 +88,11 @@
             "scaleInEditor": 1
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx": {
-            "expandedObjectLayers": [
-                14
-            ],
-            "scale": 2,
-            "selectedLayer": 6,
+            "scale": 3,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 336.5,
-                "y": -30
+                "x": 290,
+                "y": 141.66666666666663
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
@@ -132,8 +129,8 @@
             "scale": 2,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 239.75,
-                "y": 160
+                "x": 201.5,
+                "y": 193.5
             }
         },
         "/home/machinehum/the_island/data/worlds/game/assets/art/cave.tsx": {
@@ -211,7 +208,8 @@
             "scaleInEditor": 3
         },
         "art/old_man.tsx": {
-            "scaleInDock": 1
+            "scaleInDock": 3,
+            "scaleInEditor": 11
         },
         "art/overworld.tsx": {
             "scaleInDock": 1.5,
@@ -249,18 +247,18 @@
     "project": "main.tiled-project",
     "property.type": "string",
     "recentFiles": [
-        "art/npc_test.tsx",
+        "art/old_man.tsx",
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
         "art/inner.tsx",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx",
         "art/overworld.tsx",
         "art/cave.tsx",
+        "art/npc_test.tsx",
+        "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
         "art/properties.tsx",
-        "art/speech.tsx",
-        "art/objects.tsx"
+        "art/speech.tsx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {

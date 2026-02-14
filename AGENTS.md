@@ -120,12 +120,34 @@ Required CMake packages/modules:
 - Scene renderer depth-sorts monsters and players by feet Y to approximate top-down perspective.
 - Attack marker for targeted monster is a feet-area ground indicator (bottom tile-height band), drawn behind entities.
 - Player movement uses client-side interpolation; room transitions clear interpolation caches to avoid cross-room slide artifacts.
+- Combat outcome text (`hit` / `whiffed` / `blocked`) is driven by per-entity outcome sequence counters and rendered as short-lived floating text in scene space.
 
 ### Networking/data model notes
 - `MonsterStateMsg` includes:
   - `sprite_tileset`, `sprite_name`
   - `sprite_w_tiles`, `sprite_h_tiles`
+- `PlayerStateMsg` and `MonsterStateMsg` include:
+  - `combat_outcome`, `combat_outcome_seq` (for combat feedback animations)
+- `GameStateMsg` includes:
+  - level + EXP progress fields
+  - levelable skills (`exp`, `melee`, `distance`, `magic`, `shielding`, `evasion`)
+  - derived non-levelable stats (`derived_defence`, `derived_offence`, `derived_evasion`)
 - Any protocol field changes in `src/common/msg.h` require rebuilding both client and server together.
+
+### Progression + combat notes
+- Global progression is data-driven from `data/global.toml` `[progression]`:
+  - `exp_per_level_a`
+  - `exp_per_level_b`
+  - `exp_per_level_c`
+  - Server uses `need(L) = a*L*L + b*L + c`.
+- Skill XP is persisted in auth DB (`players.skills`) for:
+  - `melee`, `distance`, `magic`, `shielding`, `evasion`
+- Combat swing resolution is outcome-based (`hit` / `missed` / `blocked`) instead of always-hit fixed damage.
+- Dead monsters respawn server-side from their authored spawn anchor after `data/global.toml` `[gameplay].monster_respawn_ms` (with retry if spawn tile is occupied).
+- Derived stats use skills plus equipped item bonuses:
+  - `defence = shielding_level + equipped_defense`
+  - `offence = melee_level + distance_level/2 + magic_level/2 + equipped_attack`
+  - `evasion = evasion_level + equipped_evasion`
 
 ### Frequent gotchas
 - Tiled tileset paths in TMX/`.world` can be relative; world loader includes fallback path resolution.

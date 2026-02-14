@@ -133,7 +133,24 @@ bool parseTomlSubsetFile(const fs::path& p, MonsterDef& out) {
             }
         }
         else if (key == "max_hp") { int v = out.max_hp; if (parseInt(raw_val, v)) out.max_hp = std::max(1, v); }
-        else if (key == "strength") { int v = out.strength; if (parseInt(raw_val, v)) out.strength = std::max(1, v); }
+        else if (key == "strength" || key == "attack" || key == "offense" || key == "offence") {
+            int v = out.strength;
+            if (parseInt(raw_val, v)) out.strength = std::max(1, v);
+        }
+        else if (key == "defense" || key == "defence" || key == "armor" || key == "armour") {
+            int v = out.defense;
+            if (parseInt(raw_val, v)) out.defense = std::max(0, v);
+        }
+        else if (key == "evasion") { int v = out.evasion; if (parseInt(raw_val, v)) out.evasion = std::max(0, v); }
+        else if (key == "shielding") {
+            int v = out.block_chance;
+            if (parseInt(raw_val, v)) out.block_chance = std::max(0, std::min(95, v));
+        }
+        else if (key == "accuracy") { int v = out.accuracy; if (parseInt(raw_val, v)) out.accuracy = std::max(1, std::min(100, v)); }
+        else if (key == "block_chance" || key == "block") {
+            int v = out.block_chance;
+            if (parseInt(raw_val, v)) out.block_chance = std::max(0, std::min(95, v));
+        }
         else if (key == "speed_ms") { int v = out.speed_ms; if (parseInt(raw_val, v)) out.speed_ms = std::max(1, v); }
         else if (key == "exp_reward") { int v = out.exp_reward; if (parseInt(raw_val, v)) out.exp_reward = std::max(0, v); }
     }
