@@ -40,6 +40,7 @@ add_executable(client
     src/client/client_ui_primitives.cpp
     src/client/client_layout.cpp
     src/client/client_support.cpp
+    src/client/ui_settings.cpp
     src/client/local_keys.cpp
     src/client/client_sheet_cache.cpp
     src/client/client_scene_renderer.cpp

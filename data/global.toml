@@ -1,0 +1,14 @@
+# Global runtime settings for client/server.
+# UI settings can be changed without rebuilding.
+
+[ui]
+# 0.0 = fully transparent bubble background, 1.0 = fully opaque.
+speech_bubble_alpha = 0.5
+
+# Name text sizes (base px before automatic UI scaling).
+player_name_text_size = 13
+monster_name_text_size = 16
+npc_name_text_size = 13
+
+# Speech text size (base px before automatic UI scaling).
+speech_text_size = 16

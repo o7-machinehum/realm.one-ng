@@ -41,6 +41,11 @@ struct SceneConfig {
     bool inventory_visible = true;
     float player_slide_tiles_per_sec = 10.0f;
     float monster_slide_tiles_per_sec = 8.0f;
+    float speech_bubble_alpha = 0.5f;
+    float player_name_text_size = 13.0f;
+    float monster_name_text_size = 16.0f;
+    float npc_name_text_size = 13.0f;
+    float speech_text_size = 16.0f;
 };
 
 struct SceneOutput {

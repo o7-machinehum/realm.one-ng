@@ -15,11 +15,8 @@ constexpr int kSpeechCols = 9;
 constexpr float kSpeechTilePx = 16.0f;
 constexpr float kSpeechTextPadX = 8.0f;
 constexpr float kSpeechTextPadY = 6.0f;
-constexpr float kMonsterLabelFontSize = 16.0f;
-constexpr float kFallbackBubbleFontSize = 16.0f;
 constexpr float kUiBaseW = 1200.0f;
 constexpr float kUiBaseH = 760.0f;
-constexpr float kSpeechBubbleAlpha = 0.5f;
 
 float uiScreenScale() {
     const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
@@ -96,10 +93,10 @@ int speechTileId(const std::string& raw_type, char pos) {
     }
 }
 
-void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px) {
+void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px, float bubble_alpha) {
     const Rectangle src = speechSrcRect(tile_id);
     const Rectangle dst{x, y, size_px, size_px};
-    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, kSpeechBubbleAlpha));
+    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, bubble_alpha));
 }
 
 std::vector<std::string> wrapSpeechText(Font font,
@@ -138,12 +135,14 @@ void drawTalkBubble(Texture2D speech_tex,
                     float head_x,
                     float head_y,
                     float map_scale,
-                    float map_view_width) {
+                    float map_view_width,
+                    float speech_text_size,
+                    float bubble_alpha) {
     if (speech_tex.id == 0 || text.empty()) return;
 
     const float ui_scale = uiScreenScale();
     const float tile_px = std::max(12.0f, std::round(map_scale * 16.0f));
-    const float font_size = std::max(14.0f, std::round(map_scale * 7.4f * ui_scale));
+    const float font_size = std::max(10.0f, std::round(speech_text_size * ui_scale));
     const float max_text_width = std::max(tile_px * 4.0f, map_view_width * 0.42f);
     const std::vector<std::string> lines = wrapSpeechText(ui_font, text, font_size, max_text_width);
 
@@ -186,7 +185,7 @@ void drawTalkBubble(Texture2D speech_tex,
         const int id = (c == 0) ? speechTileId(speech_type, 'd')
                                 : ((c == cols - 1) ? speechTileId(speech_type, 'f')
                                                    : speechTileId(speech_type, 'e'));
-        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bubble_y, tile_px);
+        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bubble_y, tile_px, bubble_alpha);
     }
 
     // Mid rows: a g...g b
@@ -196,7 +195,7 @@ void drawTalkBubble(Texture2D speech_tex,
             const int id = (c == 0) ? speechTileId(speech_type, 'a')
                                     : ((c == cols - 1) ? speechTileId(speech_type, 'b')
                                                        : speechTileId(speech_type, 'g'));
-            drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, y, tile_px);
+            drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, y, tile_px, bubble_alpha);
         }
     }
 
@@ -208,13 +207,13 @@ void drawTalkBubble(Texture2D speech_tex,
         if (c == 0) id = speechTileId(speech_type, 'c');
         else if (c == cols - 1) id = speechTileId(speech_type, 't');
         else if (c == center_col) id = speechTileId(speech_type, 'i');
-        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bottom_y, tile_px);
+        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bottom_y, tile_px, bubble_alpha);
     }
 
     // Single "j" tail tile; head (O) is the target marker, not another bubble piece.
     const float tail_x = bubble_x + center_col * tile_px;
     const float tail_y = bottom_y + tile_px * 0.88f;
-    drawSpeechTile(speech_tex, speechTileId(speech_type, 'j'), tail_x, tail_y, tile_px);
+    drawSpeechTile(speech_tex, speechTileId(speech_type, 'j'), tail_x, tail_y, tile_px, bubble_alpha);
 
     const float text_top = bubble_y + (bubble_h - text_block_h) * 0.5f - tile_px * 0.15f;
     for (size_t i = 0; i < lines.size(); ++i) {
@@ -672,7 +671,7 @@ void drawScene(const Room& room,
         const auto& m = *mv.msg;
         const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 10.0f;
         drawHealthBar(mv.click_box.x, bar_y, mv.click_box.width, m.hp, m.max_hp);
-        const float label_size = kMonsterLabelFontSize * uiScreenScale();
+        const float label_size = cfg.monster_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, m.name.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - (label_size + 3.0f), label_size, ORANGE);
     }
@@ -683,7 +682,7 @@ void drawScene(const Room& room,
         const float y = pv.ry * tile_h + tile_h * 0.5f;
         Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 10.0f, tile_w, 5.0f};
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
-        const float label_size = 13.0f * uiScreenScale();
+        const float label_size = cfg.player_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);
     }
@@ -692,7 +691,7 @@ void drawScene(const Room& room,
         const auto& n = *nv.msg;
         const float x = nv.rx * tile_w + tile_w * 0.5f;
         const float y = nv.ry * tile_h + tile_h * 0.5f;
-        const float label_size = 13.0f * uiScreenScale();
+        const float label_size = cfg.npc_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, n.name.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, n.name, x - (name_w * 0.5f), y - tile_h - (label_size + 2.0f), label_size, Color{210, 232, 255, 255});
     }
@@ -786,16 +785,26 @@ void drawSpeechOverlays(const Room& room,
 
     for (const auto& b : bubbles) {
         if (speech_ready && speech_tex.id != 0) {
-            drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text, b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width);
+            drawTalkBubble(speech_tex,
+                           ui_font,
+                           b.speech_type,
+                           b.text,
+                           b.head_x,
+                           b.head_y,
+                           cfg.map_scale,
+                           cfg.map_view_width,
+                           cfg.speech_text_size,
+                           cfg.speech_bubble_alpha);
         } else {
-            const float font_size = kFallbackBubbleFontSize * uiScreenScale();
+            const float font_size = std::max(10.0f, cfg.speech_text_size * uiScreenScale());
             const Vector2 text_size = MeasureTextEx(ui_font, b.text.c_str(), font_size, 1.0f);
             const float bubble_w = std::max(32.0f, text_size.x + 14.0f);
             const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
             const float bubble_x = b.head_x - bubble_w * 0.5f;
             const float bubble_y = b.head_y - bubble_h - 18.0f;
-            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 128});
-            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 128});
+            const unsigned char a = static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, cfg.speech_bubble_alpha)) * 255.0f);
+            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, a});
+            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, a});
             drawUiText(ui_font, b.text, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
         }
     }

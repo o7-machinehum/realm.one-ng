@@ -7,6 +7,7 @@
 #include "client_layout.h"
 #include "client_scene_renderer.h"
 #include "client_sheet_cache.h"
+#include "ui_settings.h"
 #include "client_windows.h"
 #include "auth_ui.h"
 #include "msg.h"
@@ -120,8 +121,14 @@ int main(int argc, char** argv) {
     client::AuthUiState auth_ui;
     client::initAuthUi(auth_ui);
 
-    const client::SceneConfig scene_cfg{};
+    client::SceneConfig scene_cfg{};
     const client::InventoryUiConfig inventory_cfg{};
+    const client::UiSettings ui_settings = client::loadUiSettings("data/global.toml");
+    scene_cfg.speech_bubble_alpha = ui_settings.speech_bubble_alpha;
+    scene_cfg.player_name_text_size = ui_settings.player_name_text_size;
+    scene_cfg.monster_name_text_size = ui_settings.monster_name_text_size;
+    scene_cfg.npc_name_text_size = ui_settings.npc_name_text_size;
+    scene_cfg.speech_text_size = ui_settings.speech_text_size;
 
     for (const auto& def : client::loadClientItemDefs("game/items")) {
         item_defs_by_key[client::normalizeKey(def.id)] = def;
