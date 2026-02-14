@@ -3,7 +3,7 @@
  <image source="properties.png" width="640" height="400"/>
  <tile id="0">
   <properties>
-   <property name="not_walkable" type="bool" value="true"/>
+   <property name="non_walkable" type="bool" value="true"/>
   </properties>
  </tile>
 </tileset>

@@ -9,7 +9,7 @@
    </properties>
   </property>
  </properties>
- <tileset firstgid="1" source="../../../game/assets/art/cave.tsx"/>
+ <tileset firstgid="1" source="../../../../game/assets/art/cave.tsx"/>
  <layer id="1" name="Floor" width="30" height="20">
   <data encoding="csv">
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -179,14 +179,14 @@
 </data>
  </layer>
  <objectgroup id="11" name="Portals">
-  <object id="1" x="224" y="80.5455" width="16.1818" height="15.2727">
+  <object id="1" x="224.694" y="79.5048" width="16.1818" height="15.2727">
    <properties>
     <property name="p1" type="class" propertytype="potal">
      <properties>
       <property name="room" value="0"/>
       <property name="world" value="500_500"/>
-      <property name="x" type="int" value="5"/>
-      <property name="y" type="int" value="5"/>
+      <property name="x" type="int" value="14"/>
+      <property name="y" type="int" value="8"/>
      </properties>
     </property>
    </properties>
