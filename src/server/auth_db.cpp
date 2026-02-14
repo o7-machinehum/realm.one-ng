@@ -104,13 +104,13 @@ AuthDb::AuthDb(const std::string& db_path) {
         "username TEXT PRIMARY KEY,"
         "password TEXT NOT NULL DEFAULT '',"
         "public_key TEXT NOT NULL DEFAULT '',"
-        "room TEXT NOT NULL DEFAULT '0.tmx',"
+        "room TEXT NOT NULL DEFAULT '500_500:0.tmx',"
         "exp INTEGER NOT NULL DEFAULT 0"
         ");");
 
     ensureColumn(db_, "players", "public_key", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db_, "players", "x", "INTEGER NOT NULL DEFAULT 2");
-    ensureColumn(db_, "players", "y", "INTEGER NOT NULL DEFAULT 2");
+    ensureColumn(db_, "players", "x", "INTEGER NOT NULL DEFAULT 16");
+    ensureColumn(db_, "players", "y", "INTEGER NOT NULL DEFAULT 10");
     ensureColumn(db_, "players", "inventory", "TEXT NOT NULL DEFAULT ''");
     ensureColumn(db_, "players", "equipment", "TEXT NOT NULL DEFAULT ''");
 }
@@ -194,10 +194,10 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
         }
     }
 
-    out_player.room = "0.tmx";
+    out_player.room = "500_500:0.tmx";
     out_player.exp = 0;
-    out_player.x = 2;
-    out_player.y = 2;
+    out_player.x = 16;
+    out_player.y = 10;
     out_player.inventory.clear();
 
     sqlite3_stmt* insert_stmt = nullptr;
