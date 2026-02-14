@@ -149,7 +149,8 @@ bool Sprites::loadTSX(const std::string& tsx_path, const SizeOverrideMap& size_o
 
             const char* pval = p->Attribute("value");
 
-            if (std::strcmp(pname, "name") == 0 && pval) {
+            if ((std::strcmp(pname, "name") == 0 ||
+                 std::strcmp(pname, "monster_name") == 0) && pval) {
                 sprite_name = pval;
             }
         }

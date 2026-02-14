@@ -91,11 +91,11 @@
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 3,
-            "selectedLayer": 2,
+            "scale": 2,
+            "selectedLayer": 6,
             "viewCenter": {
-                "x": 239.99999999999997,
-                "y": 159.66666666666663
+                "x": 336.5,
+                "y": -30
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
@@ -116,8 +116,8 @@
             "scale": 2.8826562499999997,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 240.05637161905793,
-                "y": 159.9219469889967
+                "x": 327.82264621388697,
+                "y": 155.41221746436122
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx": {
@@ -247,7 +247,7 @@
         "art/npc_test.tsx"
     ],
     "project": "main.tiled-project",
-    "property.type": "bool",
+    "property.type": "string",
     "recentFiles": [
         "art/npc_test.tsx",
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",

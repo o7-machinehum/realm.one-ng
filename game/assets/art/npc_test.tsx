@@ -3,7 +3,7 @@
  <image source="npc_test.png" width="128" height="256"/>
  <tile id="0">
   <properties>
-   <property name="name" value="nude_boy"/>
+   <property name="monster_name" value="nude_boy"/>
   </properties>
  </tile>
 </tileset>

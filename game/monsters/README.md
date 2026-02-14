@@ -18,8 +18,8 @@ Use one field:
 
 1. In a room `.tmx`, create a tile layer named `Monsters`.
 2. Paint tiles on that layer where monsters should spawn.
-3. Those tiles must come from a TSX tile that has property `name`.
-   Example: `name = "rat"` resolves to `game/monsters/rat.toml`.
+3. Those tiles must come from a TSX tile that has property `monster_name`.
+   Example: `monster_name = "rat"` resolves to `game/monsters/rat.toml`.
 4. The painted tile is treated as the monster anchor tile (bottom-left).
 
 The server reads the `Monsters` layer and instantiates runtime monsters from the matched TOML template.
