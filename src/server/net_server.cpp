@@ -5,6 +5,7 @@
 #include "item_defs.h"
 #include "monster_combat.h"
 #include "monster_defs.h"
+#include "npc_defs.h"
 #include "server_runtime.h"
 #include "world.h"
 
@@ -27,6 +28,7 @@ constexpr int kInventoryLimit = 8;
 constexpr int kCombatDamagePerTick = 6;
 constexpr int kTickMs = 500;
 constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick
+constexpr int kNpcTalkRangeTiles = 8;
 
 void sendWire(ENetPeer* peer,
               uint8_t channel,
@@ -103,6 +105,7 @@ std::vector<EquippedItemMsg> toEquippedMsgVec(const std::unordered_map<std::stri
 GameStateMsg makeGameState(const PlayerRuntime& self,
                            const std::unordered_map<ENetPeer*, PlayerRuntime>& players,
                            const std::vector<MonsterRuntime>& monsters,
+                           const std::vector<NpcRuntime>& npcs,
                            const std::vector<GroundItemRuntime>& items,
                            std::string event_text) {
     GameStateMsg gs;
@@ -144,6 +147,13 @@ GameStateMsg makeGameState(const PlayerRuntime& self,
         if (m.room != self.data.room) continue;
         gs.monsters.push_back(MonsterStateMsg{
             m.id, m.name, m.sprite_tileset, m.sprite_name, m.size_w, m.size_h, m.room, m.x, m.y, m.hp, m.max_hp, m.facing, m.attack_anim_seq
+        });
+    }
+
+    for (const auto& n : npcs) {
+        if (n.room != self.data.room) continue;
+        gs.npcs.push_back(NpcStateMsg{
+            n.id, n.name, n.sprite_tileset, n.sprite_name, n.size_w, n.size_h, n.room, n.x, n.y, n.facing
         });
     }
 
@@ -201,8 +211,10 @@ void NetServer::recvLoop() {
 
     std::unordered_map<ENetPeer*, PlayerRuntime> players;
     std::vector<MonsterRuntime> monsters;
+    std::vector<NpcRuntime> npcs;
     std::vector<GroundItemRuntime> items;
     int next_monster_id = 1;
+    int next_npc_id = 1;
     int next_item_id = 1;
 
     auto monster_defs = loadMonsterDefs("game/monsters");
@@ -210,6 +222,12 @@ void NetServer::recvLoop() {
     for (const auto& d : monster_defs) defs_by_id[normalizeId(d.id)] = &d;
     if (defs_by_id.empty()) {
         std::cerr << "[server] warning: no monster defs found in game/monsters\n";
+    }
+    auto npc_defs = loadNpcDefs("game/npcs");
+    std::unordered_map<std::string, const NpcDef*> npc_defs_by_id;
+    for (const auto& d : npc_defs) npc_defs_by_id[normalizeId(d.id)] = &d;
+    if (npc_defs_by_id.empty()) {
+        std::cerr << "[server] warning: no npc defs found in game/npcs\n";
     }
     auto item_defs = loadItemDefs("game/items");
     std::unordered_map<std::string, const ItemDef*> item_defs_by_id;
@@ -321,6 +339,57 @@ void NetServer::recvLoop() {
             }
             spawnItemById(spawn.item_id, room_name, spawn.x, spawn.y);
         }
+        for (const auto& spawn : room->npc_spawns()) {
+            auto dit = npc_defs_by_id.find(normalizeId(spawn.npc_id));
+            if (dit == npc_defs_by_id.end()) {
+                std::cerr << "[server] unknown npc id '" << spawn.npc_id
+                          << "' in room " << room_name << "\n";
+                continue;
+            }
+            const NpcDef& def = *dit->second;
+            if (!room->isWalkable(spawn.x, spawn.y)) {
+                std::cerr << "[server] npc spawn '" << spawn.npc_id
+                          << "' overlaps blocked anchor tile in room "
+                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                continue;
+            }
+            bool overlap = false;
+            for (const auto& m : monsters) {
+                if (m.room != room_name || m.hp <= 0) continue;
+                if (m.x == spawn.x && m.y == spawn.y) { overlap = true; break; }
+            }
+            if (!overlap) {
+                for (const auto& n : npcs) {
+                    if (n.room != room_name) continue;
+                    if (n.x == spawn.x && n.y == spawn.y) { overlap = true; break; }
+                }
+            }
+            if (overlap) {
+                std::cerr << "[server] overlapping npc spawn in room "
+                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                continue;
+            }
+            npcs.push_back(NpcRuntime{
+                next_npc_id++,
+                def.id,
+                def.name,
+                def.sprite_tileset,
+                def.id,
+                room_name,
+                spawn.x,
+                spawn.y,
+                spawn.x,
+                spawn.y,
+                std::max(1, def.npc_size_w),
+                std::max(1, def.npc_size_h),
+                kDefaultFacingSouth,
+                std::max(1, def.speed_ms),
+                0,
+                0,
+                std::max(0, def.wander_radius),
+                def.dialogues
+            });
+        }
     }
 
     auto sendRoom = [&](ENetPeer* peer, const std::string& room_name) {
@@ -337,7 +406,7 @@ void NetServer::recvLoop() {
     auto broadcastState = [&](const std::string& event_text) {
         for (const auto& [peer, p] : players) {
             if (!p.authenticated) continue;
-            auto gs = makeGameState(p, players, monsters, items, event_text);
+            auto gs = makeGameState(p, players, monsters, npcs, items, event_text);
             sendWire(peer, 0, pack(MsgType::GameState, gs));
         }
         enet_host_flush(server);
@@ -352,6 +421,14 @@ void NetServer::recvLoop() {
         for (const auto& m : monsters) {
             if (m.room != room_name) continue;
             if (monsterOccupies(m, x, y)) return true;
+        }
+        return false;
+    };
+
+    auto occupiedByNpc = [&](const std::string& room_name, int x, int y) -> bool {
+        for (const auto& n : npcs) {
+            if (n.room != room_name) continue;
+            if (n.x == x && n.y == y) return true;
         }
         return false;
     };
@@ -446,9 +523,38 @@ void NetServer::recvLoop() {
             if (p.data.room != mon.room) continue;
             if (p.data.x == nx && p.data.y == ny) return false;
         }
+        for (const auto& n : npcs) {
+            if (n.room != mon.room) continue;
+            if (n.x == nx && n.y == ny) return false;
+        }
         for (const auto& other : monsters) {
             if (other.id == ignore_monster_id) continue;
             if (other.room != mon.room || other.hp <= 0) continue;
+            if (other.x == nx && other.y == ny) return false;
+        }
+        return true;
+    };
+
+    auto canNpcStand = [&](const NpcRuntime& npc,
+                           int nx,
+                           int ny,
+                           int ignore_npc_id) -> bool {
+        const Room* room = world_.getRoom(npc.room);
+        if (!room) return false;
+        if (!room->isWalkable(nx, ny)) return false;
+        if (std::abs(nx - npc.home_x) + std::abs(ny - npc.home_y) > std::max(0, npc.wander_radius)) return false;
+        for (const auto& [_, p] : players) {
+            if (!p.authenticated) continue;
+            if (p.data.room != npc.room) continue;
+            if (p.data.x == nx && p.data.y == ny) return false;
+        }
+        for (const auto& m : monsters) {
+            if (m.room != npc.room || m.hp <= 0) continue;
+            if (m.x == nx && m.y == ny) return false;
+        }
+        for (const auto& other : npcs) {
+            if (other.id == ignore_npc_id) continue;
+            if (other.room != npc.room) continue;
             if (other.x == nx && other.y == ny) return false;
         }
         return true;
@@ -497,7 +603,8 @@ void NetServer::recvLoop() {
         const int fallback_x = std::max(0, std::min(2, room->map_width() - 1));
         const int fallback_y = std::max(0, std::min(2, room->map_height() - 1));
         if (room->isWalkable(fallback_x, fallback_y) &&
-            !occupiedByMonster(room_name, fallback_x, fallback_y)) {
+            !occupiedByMonster(room_name, fallback_x, fallback_y) &&
+            !occupiedByNpc(room_name, fallback_x, fallback_y)) {
             out_x = fallback_x;
             out_y = fallback_y;
             return true;
@@ -507,6 +614,7 @@ void NetServer::recvLoop() {
             for (int x = 0; x < room->map_width(); ++x) {
                 if (!room->isWalkable(x, y)) continue;
                 if (occupiedByMonster(room_name, x, y)) continue;
+                if (occupiedByNpc(room_name, x, y)) continue;
                 out_x = x;
                 out_y = y;
                 return true;
@@ -623,6 +731,7 @@ void NetServer::recvLoop() {
                                 break;
                             }
                             if (occupiedByMonster(next_room, next_x, next_y) ||
+                                occupiedByNpc(next_room, next_x, next_y) ||
                                 occupiedByPlayer(ev.peer, next_room, next_x, next_y)) {
                                 break;
                             }
@@ -742,6 +851,7 @@ void NetServer::recvLoop() {
                                 }
                                 if (!room->isWalkable(drop_x, drop_y)) break;
                                 if (occupiedByMonster(player.data.room, drop_x, drop_y) ||
+                                    occupiedByNpc(player.data.room, drop_x, drop_y) ||
                                     occupiedByPlayer(ev.peer, player.data.room, drop_x, drop_y)) {
                                     break;
                                 }
@@ -849,6 +959,7 @@ void NetServer::recvLoop() {
                             }
                             if (!room->isWalkable(m.to_x, m.to_y)) break;
                             if (occupiedByMonster(player.data.room, m.to_x, m.to_y) ||
+                                occupiedByNpc(player.data.room, m.to_x, m.to_y) ||
                                 occupiedByPlayer(ev.peer, player.data.room, m.to_x, m.to_y)) {
                                 break;
                             }
@@ -883,6 +994,76 @@ void NetServer::recvLoop() {
                                 if (!p.authenticated) continue;
                                 if (p.data.room != player.data.room) continue;
                                 sendWire(peer, 0, pack(MsgType::Chat, out));
+                            }
+
+                            auto normalizeText = [&](std::string s) -> std::string {
+                                std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+                                    return static_cast<char>(std::tolower(c));
+                                });
+                                for (char& c : s) {
+                                    if (!(std::isalnum(static_cast<unsigned char>(c)) || std::isspace(static_cast<unsigned char>(c)))) {
+                                        c = ' ';
+                                    }
+                                }
+                                while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+                                while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+                                return s;
+                            };
+
+                            const std::string norm_text = normalizeText(text);
+                            auto containsTopic = [&](const std::string& hay, const std::string& needle) -> bool {
+                                if (hay.empty() || needle.empty()) return false;
+                                if (hay == needle) return true;
+                                const std::string padded_hay = " " + hay + " ";
+                                const std::string padded_needle = " " + needle + " ";
+                                return padded_hay.find(padded_needle) != std::string::npos;
+                            };
+                            int best_idx = -1;
+                            int best_dist = 999999;
+                            std::string npc_reply;
+                            std::string npc_name;
+                            int speaker_dx = 0;
+                            int speaker_dy = 0;
+                            for (size_t i = 0; i < npcs.size(); ++i) {
+                                const auto& npc = npcs[i];
+                                if (npc.room != player.data.room) continue;
+                                const int dist = tileDistance(player.data.x, player.data.y, npc.x, npc.y);
+                                if (dist > kNpcTalkRangeTiles) continue;
+                                std::string matched_reply;
+                                for (const auto& d : npc.dialogues) {
+                                    if (d.response.empty()) continue;
+                                    for (const auto& q : d.questions) {
+                                        const std::string nq = normalizeText(q);
+                                        if (nq.empty()) continue;
+                                        if (containsTopic(norm_text, nq)) {
+                                            matched_reply = d.response;
+                                            break;
+                                        }
+                                    }
+                                    if (!matched_reply.empty()) break;
+                                }
+                                if (matched_reply.empty()) continue;
+                                if (dist >= best_dist) continue;
+                                best_dist = dist;
+                                best_idx = static_cast<int>(i);
+                                npc_reply = matched_reply;
+                                npc_name = npc.name;
+                                speaker_dx = player.data.x - npc.x;
+                                speaker_dy = player.data.y - npc.y;
+                            }
+                            if (best_idx >= 0 && !npc_reply.empty() && !npc_name.empty()) {
+                                npcs[(size_t)best_idx].facing = facingFromDelta(
+                                    speaker_dx,
+                                    speaker_dy,
+                                    npcs[(size_t)best_idx].facing
+                                );
+                                npcs[(size_t)best_idx].talk_pause_ms = std::max(npcs[(size_t)best_idx].talk_pause_ms, 3000);
+                                ChatMsg npc_chat{npc_name, "talk", npc_reply};
+                                for (const auto& [peer, p] : players) {
+                                    if (!p.authenticated) continue;
+                                    if (p.data.room != player.data.room) continue;
+                                    sendWire(peer, 0, pack(MsgType::Chat, npc_chat));
+                                }
                             }
                             enet_host_flush(server);
                         } break;
@@ -1039,6 +1220,42 @@ void NetServer::recvLoop() {
                 if (moved) {
                     changed = true;
                     if (tick_event.empty()) tick_event = "monsters moved";
+                }
+            }
+
+            for (auto& npc : npcs) {
+                if (npc.talk_pause_ms > 0) {
+                    npc.talk_pause_ms = std::max(0, npc.talk_pause_ms - static_cast<int>(tick_dt.count()));
+                    continue;
+                }
+                npc.move_accum_ms += static_cast<int>(tick_dt.count());
+                if (npc.move_accum_ms < std::max(1, npc.speed_ms)) continue;
+                npc.move_accum_ms = 0;
+
+                std::array<std::pair<int, int>, 4> dirs = {{
+                    {0, -1}, {1, 0}, {0, 1}, {-1, 0}
+                }};
+                const int start = std::rand() % 4;
+                std::array<std::pair<int, int>, 4> random_dirs = {{
+                    dirs[(start + 0) % 4],
+                    dirs[(start + 1) % 4],
+                    dirs[(start + 2) % 4],
+                    dirs[(start + 3) % 4]
+                }};
+                bool moved = false;
+                for (const auto& [dx, dy] : random_dirs) {
+                    const int nx = npc.x + dx;
+                    const int ny = npc.y + dy;
+                    if (!canNpcStand(npc, nx, ny, npc.id)) continue;
+                    npc.facing = facingFromDelta(dx, dy, npc.facing);
+                    npc.x = nx;
+                    npc.y = ny;
+                    moved = true;
+                    break;
+                }
+                if (moved) {
+                    changed = true;
+                    if (tick_event.empty()) tick_event = "npcs moved";
                 }
             }
 

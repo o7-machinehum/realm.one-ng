@@ -252,6 +252,25 @@ std::string pickSpriteName(const Sprites& sprites, const MonsterStateMsg& m) {
     return requested.empty() ? "player_1" : requested;
 }
 
+std::string pickSpriteName(const Sprites& sprites, const NpcStateMsg& n) {
+    const std::string requested = n.sprite_name;
+    const std::string req_lower = toLower(requested);
+    const std::string name_lower = toLower(n.name);
+
+    const auto has_any = [&](const std::string& k) {
+        return sprites.frame_count(k, Dir::S) > 0 ||
+               sprites.frame_count(k, Dir::E) > 0 ||
+               sprites.frame_count(k, Dir::N) > 0 ||
+               sprites.frame_count(k, Dir::W) > 0;
+    };
+
+    if (!requested.empty() && has_any(requested)) return requested;
+    if (!req_lower.empty() && has_any(req_lower)) return req_lower;
+    if (!name_lower.empty() && has_any(name_lower)) return name_lower;
+    if (has_any("player_1")) return "player_1";
+    return requested.empty() ? "player_1" : requested;
+}
+
 Dir dirFromFacingInt(int facing, Dir fallback = Dir::S) {
     switch (facing) {
         case 0: return Dir::N;
@@ -332,12 +351,22 @@ void drawScene(const Room& room,
         float ry = 0.0f;
         AnimationComponent* anim = nullptr;
     };
+    struct NpcVisual {
+        const NpcStateMsg* msg = nullptr;
+        const Sprites* sprites = nullptr;
+        Texture2D tex{};
+        bool ready = false;
+        AnimationComponent* anim = nullptr;
+        float rx = 0.0f;
+        float ry = 0.0f;
+    };
     struct DrawCmd {
         float feet_y = 0.0f;
-        int kind = 0; // 0 monster, 1 player
+        int kind = 0; // 0 monster, 1 npc, 2 player
         size_t idx = 0;
     };
     std::vector<MonsterVisual> monster_visuals;
+    std::vector<NpcVisual> npc_visuals;
     std::vector<PlayerVisual> player_visuals;
     std::vector<DrawCmd> draw_cmds;
     const MonsterStateMsg* active_target = nullptr;
@@ -425,6 +454,36 @@ void drawScene(const Room& room,
         draw_cmds.push_back(DrawCmd{ry * tile_h, 0, monster_visuals.size() - 1});
     }
 
+    for (const auto& n : game_state.npcs) {
+        SpriteSheetView sheet_view{};
+        if (monster_sheet_view) sheet_view = monster_sheet_view(n.sprite_tileset);
+        const Sprites* npc_sprites = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : &sprites;
+        const Texture2D npc_tex = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : character_tex;
+        const bool npc_ready = (sheet_view.ready && sheet_view.sprites) ? true : sprite_ready;
+
+        const std::string key = "n:" + std::to_string(n.id);
+        auto& anim = scene_state.anim_by_key[key];
+        anim.sprite_name = pickSpriteName(*npc_sprites, n);
+
+        auto& prev = scene_state.prev_pos_by_key[key];
+        const int dx = n.x - prev.first;
+        const int dy = n.y - prev.second;
+        const bool moved = (dx != 0 || dy != 0);
+        anim.dir = dirFromFacingInt(n.facing, anim.dir);
+        tickAnimation(anim, *npc_sprites, moved, false, dt);
+        prev = {n.x, n.y};
+        const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
+                                        key,
+                                        n.x,
+                                        n.y,
+                                        dt,
+                                        cfg.monster_slide_tiles_per_sec);
+        npc_visuals.push_back(NpcVisual{
+            &n, npc_sprites, npc_tex, npc_ready, &anim, rx, ry
+        });
+        draw_cmds.push_back(DrawCmd{ry * tile_h, 1, npc_visuals.size() - 1});
+    }
+
     for (const auto& p : game_state.players) {
         const std::string key = "p:" + p.user;
         auto& anim = scene_state.anim_by_key[key];
@@ -452,7 +511,7 @@ void drawScene(const Room& room,
                                         cfg.player_slide_tiles_per_sec);
 
         player_visuals.push_back(PlayerVisual{&p, rx, ry, &anim});
-        draw_cmds.push_back(DrawCmd{ry * tile_h, 1, player_visuals.size() - 1});
+        draw_cmds.push_back(DrawCmd{ry * tile_h, 2, player_visuals.size() - 1});
     }
 
     auto findTopItemAt = [&](Vector2 mouse) -> int {
@@ -555,6 +614,15 @@ void drawScene(const Room& room,
                 const float y = mv.ry * tile_h + tile_h * 0.5f;
                 DrawCircle(static_cast<int>(x), static_cast<int>(y), 10, RED);
             }
+        } else if (cmd.kind == 1) {
+            const auto& nv = npc_visuals[cmd.idx];
+            if (nv.ready) {
+                drawActor(*nv.sprites, nv.tex, *nv.anim, nv.rx, nv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
+            } else {
+                const float x = nv.rx * tile_w + tile_w * 0.5f;
+                const float y = nv.ry * tile_h + tile_h * 0.5f;
+                DrawCircle(static_cast<int>(x), static_cast<int>(y), 9, SKYBLUE);
+            }
         } else {
             const auto& pv = player_visuals[cmd.idx];
             const auto& p = *pv.msg;
@@ -617,32 +685,15 @@ void drawScene(const Room& room,
         const float label_size = 13.0f * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);
+    }
 
-        // "O" is treated as the player head anchor for bubble/tail placement.
-        auto sit = scene_state.speech_text_by_user.find(p.user);
-        auto yit = scene_state.speech_type_by_user.find(p.user);
-        auto tit = scene_state.speech_timer_by_user.find(p.user);
-        if (sit != scene_state.speech_text_by_user.end() &&
-            tit != scene_state.speech_timer_by_user.end() &&
-            tit->second > 0.0f &&
-            !sit->second.empty()) {
-            const float head_x = x + tile_w * 0.20f;
-            const float head_y = y - tile_h * 0.68f;
-            const std::string speech_type = (yit != scene_state.speech_type_by_user.end()) ? yit->second : "talk";
-            if (speech_ready && speech_tex.id != 0) {
-                drawTalkBubble(speech_tex, ui_font, speech_type, sit->second, head_x, head_y, cfg.map_scale, cfg.map_view_width);
-            } else {
-                const float font_size = kFallbackBubbleFontSize * uiScreenScale();
-                const Vector2 text_size = MeasureTextEx(ui_font, sit->second.c_str(), font_size, 1.0f);
-                const float bubble_w = std::max(32.0f, text_size.x + 14.0f);
-                const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
-                const float bubble_x = head_x - bubble_w * 0.5f;
-                const float bubble_y = head_y - bubble_h - 18.0f;
-                DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 255});
-                DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 255});
-                drawUiText(ui_font, sit->second, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
-            }
-        }
+    for (const auto& nv : npc_visuals) {
+        const auto& n = *nv.msg;
+        const float x = nv.rx * tile_w + tile_w * 0.5f;
+        const float y = nv.ry * tile_h + tile_h * 0.5f;
+        const float label_size = 13.0f * uiScreenScale();
+        const float name_w = MeasureTextEx(ui_font, n.name.c_str(), label_size, 1.0f).x;
+        drawUiText(ui_font, n.name, x - (name_w * 0.5f), y - tile_h - (label_size + 2.0f), label_size, Color{210, 232, 255, 255});
     }
 
     rlPopMatrix();
@@ -665,12 +716,88 @@ void drawScene(const Room& room,
         if (it->second <= 0.0f) {
             scene_state.speech_text_by_user.erase(it->first);
             scene_state.speech_type_by_user.erase(it->first);
+            scene_state.speech_seq_by_user.erase(it->first);
             it = scene_state.speech_timer_by_user.erase(it);
         } else {
             ++it;
         }
     }
 
+}
+
+void drawSpeechOverlays(const Room& room,
+                        const GameStateMsg& game_state,
+                        Texture2D speech_tex,
+                        bool speech_ready,
+                        Font ui_font,
+                        SceneState& scene_state,
+                        const SceneConfig& cfg) {
+    struct Bubble {
+        uint64_t seq = 0;
+        std::string text;
+        std::string speech_type;
+        float head_x = 0.0f;
+        float head_y = 0.0f;
+    };
+
+    const float tile_w = room.tile_width() * cfg.map_scale;
+    const float tile_h = room.tile_height() * cfg.map_scale;
+    std::vector<Bubble> bubbles;
+
+    auto pushBubbleFor = [&](const std::string& who, float rx, float ry) {
+        auto sit = scene_state.speech_text_by_user.find(who);
+        auto yit = scene_state.speech_type_by_user.find(who);
+        auto tit = scene_state.speech_timer_by_user.find(who);
+        if (sit == scene_state.speech_text_by_user.end()) return;
+        if (tit == scene_state.speech_timer_by_user.end()) return;
+        if (tit->second <= 0.0f || sit->second.empty()) return;
+        uint64_t seq = 0;
+        auto qit = scene_state.speech_seq_by_user.find(who);
+        if (qit != scene_state.speech_seq_by_user.end()) seq = qit->second;
+        bubbles.push_back(Bubble{
+            seq,
+            sit->second,
+            (yit != scene_state.speech_type_by_user.end()) ? yit->second : std::string("talk"),
+            cfg.map_origin_x + (rx * tile_w + tile_w * 0.5f) + tile_w * 0.20f,
+            cfg.map_origin_y + (ry * tile_h + tile_h * 0.5f) - tile_h * 0.68f
+        });
+    };
+
+    for (const auto& p : game_state.players) {
+        const std::string key = "p:" + p.user;
+        auto rit = scene_state.render_pos_by_key.find(key);
+        const float rx = (rit != scene_state.render_pos_by_key.end()) ? rit->second.first : static_cast<float>(p.x);
+        const float ry = (rit != scene_state.render_pos_by_key.end()) ? rit->second.second : static_cast<float>(p.y);
+        pushBubbleFor(p.user, rx, ry);
+    }
+    for (const auto& n : game_state.npcs) {
+        const std::string key = "n:" + std::to_string(n.id);
+        auto rit = scene_state.render_pos_by_key.find(key);
+        const float rx = (rit != scene_state.render_pos_by_key.end()) ? rit->second.first : static_cast<float>(n.x);
+        const float ry = (rit != scene_state.render_pos_by_key.end()) ? rit->second.second : static_cast<float>(n.y);
+        pushBubbleFor(n.name, rx, ry);
+    }
+
+    // Most recent first should appear on top, so draw oldest to newest.
+    std::sort(bubbles.begin(), bubbles.end(), [](const Bubble& a, const Bubble& b) {
+        return a.seq < b.seq;
+    });
+
+    for (const auto& b : bubbles) {
+        if (speech_ready && speech_tex.id != 0) {
+            drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text, b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width);
+        } else {
+            const float font_size = kFallbackBubbleFontSize * uiScreenScale();
+            const Vector2 text_size = MeasureTextEx(ui_font, b.text.c_str(), font_size, 1.0f);
+            const float bubble_w = std::max(32.0f, text_size.x + 14.0f);
+            const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
+            const float bubble_x = b.head_x - bubble_w * 0.5f;
+            const float bubble_y = b.head_y - bubble_h - 18.0f;
+            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 255});
+            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 255});
+            drawUiText(ui_font, b.text, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
+        }
+    }
 }
 
 } // namespace client

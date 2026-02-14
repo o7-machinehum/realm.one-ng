@@ -22,6 +22,8 @@ struct SceneState {
     std::unordered_map<std::string, std::string> speech_text_by_user;
     std::unordered_map<std::string, std::string> speech_type_by_user;
     std::unordered_map<std::string, float> speech_timer_by_user;
+    std::unordered_map<std::string, uint64_t> speech_seq_by_user;
+    uint64_t speech_seq_counter = 0;
     int dragging_ground_item_id = -1;
     float attack_fx_t = 0.0f;
 };
@@ -69,5 +71,13 @@ void drawScene(const Room& room,
                SceneState& scene_state,
                const SceneConfig& cfg,
                SceneOutput& out);
+
+void drawSpeechOverlays(const Room& room,
+                        const GameStateMsg& game_state,
+                        Texture2D speech_tex,
+                        bool speech_ready,
+                        Font ui_font,
+                        SceneState& scene_state,
+                        const SceneConfig& cfg);
 
 } // namespace client

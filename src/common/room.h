@@ -75,6 +75,17 @@ struct ItemSpawn {
     }
 };
 
+struct NpcSpawn {
+    std::string npc_id;
+    int x = 0;
+    int y = 0;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(npc_id, x, y);
+    }
+};
+
 class Room {
 public:
     bool loadFromFile(const std::filesystem::path& tmx_path);
@@ -90,6 +101,7 @@ public:
     const std::vector<PortalTrigger>& portals() const { return portals_; }
     const std::vector<MonsterSpawn>& monster_spawns() const { return monster_spawns_; }
     const std::vector<ItemSpawn>& item_spawns() const { return item_spawns_; }
+    const std::vector<NpcSpawn>& npc_spawns() const { return npc_spawns_; }
     const std::unordered_map<std::string, std::string>& properties() const { return props_; }
     bool isWalkable(int x, int y) const;
 
@@ -111,6 +123,7 @@ private:
     std::vector<PortalTrigger> portals_;
     std::vector<MonsterSpawn> monster_spawns_;
     std::vector<ItemSpawn> item_spawns_;
+    std::vector<NpcSpawn> npc_spawns_;
     std::vector<uint8_t> walkable_mask_;
     std::unordered_map<std::string, std::string> props_;
 
@@ -118,6 +131,6 @@ private:
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(map_w_, map_h_, tile_w_, tile_h_, name_, tilesets_, layers_, portals_, monster_spawns_, item_spawns_, props_);
+        ar(map_w_, map_h_, tile_w_, tile_h_, name_, tilesets_, layers_, portals_, monster_spawns_, item_spawns_, npc_spawns_, props_);
     }
 };

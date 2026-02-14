@@ -245,6 +245,7 @@ int main(int argc, char** argv) {
                 scene_state.speech_text_by_user[from] = chat->text;
                 scene_state.speech_type_by_user[from] = chat->speech_type.empty() ? "talk" : chat->speech_type;
                 scene_state.speech_timer_by_user[from] = 3.5f;
+                scene_state.speech_seq_by_user[from] = ++scene_state.speech_seq_counter;
                 client::pushBounded(logs, from + ": " + chat->text);
             }
         }
@@ -260,6 +261,7 @@ int main(int argc, char** argv) {
             scene_state.speech_text_by_user.clear();
             scene_state.speech_type_by_user.clear();
             scene_state.speech_timer_by_user.clear();
+            scene_state.speech_seq_by_user.clear();
             scene_state.dragging_ground_item_id = -1;
         }
 
@@ -275,10 +277,12 @@ int main(int argc, char** argv) {
                 scene_state.speech_text_by_user.clear();
                 scene_state.speech_type_by_user.clear();
                 scene_state.speech_timer_by_user.clear();
+                scene_state.speech_seq_by_user.clear();
                 scene_state.dragging_ground_item_id = -1;
             }
             last_game_state_room = game_state->your_room;
             client::updateMonsterSheetCache(*game_state, monster_sheet_cache);
+            client::updateNpcSheetCache(*game_state, monster_sheet_cache);
             client::updateItemSheetCacheFromGroundItems(*game_state, item_sheet_cache);
             client::updateItemSheetCacheFromInventory(*game_state, item_defs_by_key, monster_defs_by_id, item_sheet_cache);
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
@@ -400,6 +404,22 @@ int main(int argc, char** argv) {
             rr.drawAboveEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
         }
         EndScissorMode();
+
+        if (current_room && game_state) {
+            client::SceneConfig bubble_cfg = scene_cfg;
+            bubble_cfg.map_scale = render_scale;
+            bubble_cfg.map_origin_x = map_origin_x;
+            bubble_cfg.map_origin_y = map_origin_y;
+            bubble_cfg.map_view_width = map_draw_w;
+            bubble_cfg.map_view_height = map_draw_h;
+            client::drawSpeechOverlays(*current_room,
+                                       *game_state,
+                                       speech_tex,
+                                       speech_ready,
+                                       ui_font,
+                                       scene_state,
+                                       bubble_cfg);
+        }
 
         // UI pass: window frames first (for hit testing + collapse state),
         // then each window body contents.

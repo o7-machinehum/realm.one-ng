@@ -187,6 +187,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     portals_.clear();
     monster_spawns_.clear();
     item_spawns_.clear();
+    npc_spawns_.clear();
     walkable_mask_.clear();
     props_.clear();
 
@@ -243,6 +244,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
     std::vector<std::map<int, bool>> ts_walk_props;
     std::vector<std::map<int, std::string>> ts_monster_props;
     std::vector<std::map<int, std::string>> ts_item_props;
+    std::vector<std::map<int, std::string>> ts_npc_props;
     for (XMLElement* ts = map->FirstChildElement("tileset");
          ts;
          ts = ts->NextSiblingElement("tileset")) {
@@ -259,6 +261,8 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         ts_walk_props.push_back(loadWalkableTileProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx));
         auto mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_name");
         ts_monster_props.push_back(std::move(mon_props));
+        auto npc_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "npc_name");
+        ts_npc_props.push_back(std::move(npc_props));
         auto item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item_name");
         if (item_props.empty()) {
             item_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "item_id");
@@ -459,6 +463,25 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                 auto it = ts_item_props[tsi].find(local);
                 if (it == ts_item_props[tsi].end() || it->second.empty()) continue;
                 item_spawns_.push_back(ItemSpawn{it->second, x, y});
+            }
+        }
+        break;
+    }
+
+    // ---- npc spawns from tile layer named NPCs ----
+    for (const auto& layer : layers_) {
+        if (layer.name != "NPCs") continue;
+        for (int y = 0; y < map_h_; ++y) {
+            for (int x = 0; x < map_w_; ++x) {
+                const uint32_t raw = layer.gids[(size_t)y * (size_t)layer.width + (size_t)x];
+                if (raw == 0) continue;
+                const uint32_t gid = raw & 0x1FFFFFFFu;
+                const int tsi = findTsIndexByGid(gid);
+                if (tsi < 0 || tsi >= static_cast<int>(ts_npc_props.size())) continue;
+                const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
+                auto it = ts_npc_props[tsi].find(local);
+                if (it == ts_npc_props[tsi].end() || it->second.empty()) continue;
+                npc_spawns_.push_back(NpcSpawn{it->second, x, y});
             }
         }
         break;

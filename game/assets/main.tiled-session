@@ -103,10 +103,10 @@
                 14
             ],
             "scale": 5.5,
-            "selectedLayer": 15,
+            "selectedLayer": 7,
             "viewCenter": {
-                "x": 229,
-                "y": 160
+                "x": 221.63636363636363,
+                "y": 212.54545454545456
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx": {
@@ -124,8 +124,8 @@
             "scale": 4,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 240.125,
-                "y": 160
+                "x": 196,
+                "y": 135
             }
         },
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx": {

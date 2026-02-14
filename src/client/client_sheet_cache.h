@@ -37,6 +37,10 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path);
 void updateMonsterSheetCache(const GameStateMsg& game_state,
                              std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);
 
+// Refreshes NPC sheet cache entries required by current game state.
+void updateNpcSheetCache(const GameStateMsg& game_state,
+                         std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);
+
 // Refreshes ground-item sheet cache entries required by current game state.
 void updateItemSheetCacheFromGroundItems(const GameStateMsg& game_state,
                                          std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);

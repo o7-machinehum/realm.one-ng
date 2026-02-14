@@ -1,0 +1,21 @@
+name = "Old Man"
+sprite_tileset = "old_man.tsx"
+npc_size = "1x2"
+speed_ms = 1000
+wander_radius = 2
+
+[[dialogue]]
+question = "hi, hello, hey"
+response = "Welcome. Keep your blade sharp and your pack light."
+
+[[dialogue]]
+question = "house, home"
+response = "This house is old, but the roof still keeps out the rain."
+
+[[dialogue]]
+question = "quest, job, work"
+response = "If you seek work, start by exploring the northern path."
+
+[[dialogue]]
+question = "bye, goodbye"
+response = "Safe travels."

@@ -213,6 +213,24 @@ struct GroundItemStateMsg {
     }
 };
 
+struct NpcStateMsg {
+    int id = 0;
+    std::string name;
+    std::string sprite_tileset;
+    std::string sprite_name;
+    int sprite_w_tiles = 1;
+    int sprite_h_tiles = 1;
+    std::string room;
+    int x = 0;
+    int y = 0;
+    int facing = 2; // 0=N,1=E,2=S,3=W
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(id, name, sprite_tileset, sprite_name, sprite_w_tiles, sprite_h_tiles, room, x, y, facing);
+    }
+};
+
 struct GameStateMsg {
     std::string your_user;
     std::string your_room;
@@ -228,13 +246,14 @@ struct GameStateMsg {
     std::vector<std::string> inventory;
     std::vector<PlayerStateMsg> players;
     std::vector<MonsterStateMsg> monsters;
+    std::vector<NpcStateMsg> npcs;
     std::vector<GroundItemStateMsg> items;
     std::string event_text;
 
     template <class Ar>
     void serialize(Ar& ar) {
         ar(your_user, your_room, your_x, your_y, your_exp, your_hp, your_max_hp, your_mana, your_max_mana,
-           your_equipment, attack_target_monster_id, inventory, players, monsters, items, event_text);
+           your_equipment, attack_target_monster_id, inventory, players, monsters, npcs, items, event_text);
     }
 };
 

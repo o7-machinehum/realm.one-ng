@@ -128,6 +128,18 @@ void updateMonsterSheetCache(const GameStateMsg& game_state,
     }
 }
 
+// Ensures all visible NPC sheets are loaded with current runtime sizes.
+void updateNpcSheetCache(const GameStateMsg& game_state,
+                         std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
+    for (const auto& n : game_state.npcs) {
+        if (n.sprite_tileset.empty()) continue;
+        auto& entry = cache[n.sprite_tileset];
+        const std::string size_key = normalizeKey(n.sprite_name.empty() ? n.name : n.sprite_name);
+        const std::pair<int, int> size_val{std::max(1, n.sprite_w_tiles), std::max(1, n.sprite_h_tiles)};
+        refreshSheetCacheEntry(entry, size_key, size_val, n.sprite_tileset);
+    }
+}
+
 // Ensures all visible ground-item sheets are loaded with current runtime sizes.
 void updateItemSheetCacheFromGroundItems(const GameStateMsg& game_state,
                                          std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
