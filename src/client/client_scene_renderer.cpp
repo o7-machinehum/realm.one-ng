@@ -19,6 +19,7 @@ constexpr float kMonsterLabelFontSize = 16.0f;
 constexpr float kFallbackBubbleFontSize = 16.0f;
 constexpr float kUiBaseW = 1200.0f;
 constexpr float kUiBaseH = 760.0f;
+constexpr float kSpeechBubbleAlpha = 0.5f;
 
 float uiScreenScale() {
     const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
@@ -98,7 +99,7 @@ int speechTileId(const std::string& raw_type, char pos) {
 void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px) {
     const Rectangle src = speechSrcRect(tile_id);
     const Rectangle dst{x, y, size_px, size_px};
-    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
+    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, kSpeechBubbleAlpha));
 }
 
 std::vector<std::string> wrapSpeechText(Font font,
@@ -793,8 +794,8 @@ void drawSpeechOverlays(const Room& room,
             const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
             const float bubble_x = b.head_x - bubble_w * 0.5f;
             const float bubble_y = b.head_y - bubble_h - 18.0f;
-            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 255});
-            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 255});
+            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, 128});
+            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, 128});
             drawUiText(ui_font, b.text, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
         }
     }
