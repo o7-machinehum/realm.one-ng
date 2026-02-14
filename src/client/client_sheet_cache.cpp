@@ -1,7 +1,7 @@
 #include "client_sheet_cache.h"
 
-#include <algorithm>
-#include <cctype>
+#include "string_util.h"
+
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -11,17 +11,9 @@ namespace {
 
 constexpr const char* kCorpsePrefix = "corpse:";
 
-// Trims surrounding whitespace from parser tokens.
-std::string trim(std::string s) {
-    auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) s.pop_back();
-    return s;
-}
-
 // Reads a TOML string literal or returns the raw token for bare values.
 std::string parseTomlString(const std::string& raw) {
-    std::string v = trim(raw);
+    std::string v = trimWhitespace(raw);
     if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
         return v.substr(1, v.size() - 2);
     }
@@ -62,10 +54,7 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
 
 // Normalizes ids from file/user data so lookups are case/space insensitive.
 std::string normalizeKey(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return trim(std::move(s));
+    return normalizeId(std::move(s));
 }
 
 // Extracts monster id from corpse inventory entries like "corpse:rat".
@@ -96,13 +85,13 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
         while (std::getline(in, line)) {
             const auto hash = line.find('#');
             if (hash != std::string::npos) line = line.substr(0, hash);
-            line = trim(line);
+            line = trimWhitespace(line);
             if (line.empty() || line.front() == '[') continue;
 
             const auto eq = line.find('=');
             if (eq == std::string::npos) continue;
-            const std::string key = trim(line.substr(0, eq));
-            const std::string value = trim(line.substr(eq + 1));
+            const std::string key = trimWhitespace(line.substr(0, eq));
+            const std::string value = trimWhitespace(line.substr(eq + 1));
             if (key == "name") def.name = parseTomlString(value);
             else if (key == "sprite_tileset") def.sprite_tileset = parseTomlString(value);
             else if (key == "equip_type" || key == "item_type" || key == "type" || key == "slot") {

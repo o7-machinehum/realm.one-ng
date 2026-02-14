@@ -89,32 +89,32 @@
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx": {
             "scale": 2,
-            "selectedLayer": 10,
+            "selectedLayer": 7,
             "viewCenter": {
-                "x": 278.5,
-                "y": -133.5
+                "x": 310,
+                "y": 406.5
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 3,
-            "selectedLayer": 3,
+            "scale": 2,
+            "selectedLayer": 7,
             "viewCenter": {
-                "x": 177,
-                "y": 347.66666666666663
+                "x": 268.5,
+                "y": 434
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx": {
             "expandedObjectLayers": [
                 11
             ],
-            "scale": 2.8826562499999997,
+            "scale": 2,
             "selectedLayer": 7,
             "viewCenter": {
-                "x": 327.82264621388697,
-                "y": 155.41221746436122
+                "x": 310,
+                "y": 86.5
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx": {

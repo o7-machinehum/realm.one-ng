@@ -1,19 +1,12 @@
 #include "ui_settings.h"
 
-#include <algorithm>
-#include <cctype>
+#include "string_util.h"
+
 #include <fstream>
 #include <string>
 
 namespace client {
 namespace {
-
-std::string trim(std::string s) {
-    auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
-    while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) s.pop_back();
-    return s;
-}
 
 std::string stripComment(const std::string& s) {
     bool in_quotes = false;
@@ -46,26 +39,22 @@ UiSettings loadUiSettings(const std::string& path) {
     std::string section;
     std::string line;
     while (std::getline(in, line)) {
-        line = trim(stripComment(line));
+        line = trimWhitespace(stripComment(line));
         if (line.empty()) continue;
 
         if (line.front() == '[' && line.back() == ']') {
-            section = trim(line.substr(1, line.size() - 2));
-            std::transform(section.begin(), section.end(), section.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
+            section = trimWhitespace(line.substr(1, line.size() - 2));
+            section = toLowerAscii(std::move(section));
             continue;
         }
 
         const auto eq = line.find('=');
         if (eq == std::string::npos) continue;
-        std::string key = trim(line.substr(0, eq));
-        const std::string value = trim(line.substr(eq + 1));
+        std::string key = trimWhitespace(line.substr(0, eq));
+        const std::string value = trimWhitespace(line.substr(eq + 1));
         if (key.empty() || value.empty()) continue;
 
-        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
+        key = toLowerAscii(std::move(key));
 
         // Support both top-level keys and [ui] section keys.
         if (!section.empty() && section != "ui") continue;

@@ -20,6 +20,7 @@ add_library(qg_common
   src/common/sprites.cpp
   src/common/room.cpp
   src/common/entity.cpp
+  src/common/string_util.cpp
   src/client/room_render.cpp
 )
 
@@ -47,6 +48,8 @@ add_executable(client
     src/client/client_inventory_ui.cpp
     src/client/client_windows.cpp
     src/client/net_client.cpp
+    src/client/speech_bubble.cpp
+    src/client/combat_fx.cpp
     src/server/monster_defs.cpp
 )
 
@@ -67,7 +70,11 @@ target_include_directories(client PRIVATE
 add_executable(server
     src/server/server.cpp
     src/server/net_server.cpp
-    src/server/monster_combat.cpp
+    src/server/server_util.cpp
+    src/server/server_occupancy.cpp
+    src/server/server_spawning.cpp
+    src/server/server_msg_handlers.cpp
+    src/server/server_tick.cpp
     src/server/world.cpp
     src/server/monster_defs.cpp
     src/server/npc_defs.cpp
@@ -86,6 +93,7 @@ target_link_libraries(server PRIVATE
 target_include_directories(server PRIVATE
     ${ENET_INCLUDE_DIRS}
     ${SQLITE3_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )

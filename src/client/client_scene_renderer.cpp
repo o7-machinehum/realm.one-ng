@@ -1,21 +1,18 @@
 #include "client_scene_renderer.h"
 
+#include "combat_fx.h"
+#include "speech_bubble.h"
+#include "string_util.h"
+
 #include <algorithm>
-#include <cctype>
 #include <cmath>
-#include <sstream>
 #include <vector>
 
-#include <tinyxml2.h>
 #include "rlgl.h"
 
 namespace client {
 namespace {
 
-constexpr int kSpeechCols = 9;
-constexpr float kSpeechTilePx = 16.0f;
-constexpr float kSpeechTextPadX = 8.0f;
-constexpr float kSpeechTextPadY = 6.0f;
 constexpr float kUiBaseW = 1200.0f;
 constexpr float kUiBaseH = 760.0f;
 constexpr float kCombatFxDurationSec = 0.95f;
@@ -29,219 +26,12 @@ float uiScreenScale() {
     return std::max(0.85f, std::min(2.2f, std::min(sx, sy)));
 }
 
-std::string lowerCopy(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
-
-Rectangle speechSrcRect(int tile_id) {
-    const int tx = tile_id % kSpeechCols;
-    const int ty = tile_id / kSpeechCols;
-    return Rectangle{
-        tx * kSpeechTilePx,
-        ty * kSpeechTilePx,
-        kSpeechTilePx,
-        kSpeechTilePx
-    };
-}
-
-int speechTileId(const std::string& raw_type, char pos) {
-    const std::string type = lowerCopy(raw_type);
-    if (type == "think") {
-        switch (pos) {
-            case 'a': return 15;
-            case 'b': return 17;
-            case 'c': return 24;
-            case 'd': return 6;
-            case 'e': return 7;
-            case 'f': return 8;
-            case 'g': return 16;
-            case 'h': return 25;
-            case 'i': return 40;
-            case 'j': return 49;
-            case 't': return 26;
-            default: return 16;
-        }
-    }
-    if (type == "yell") {
-        switch (pos) {
-            case 'a': return 36;
-            case 'b': return 38;
-            case 'c': return 45;
-            case 'd': return 27;
-            case 'e': return 28;
-            case 'f': return 29;
-            case 'g': return 37;
-            case 'h': return 46;
-            case 'i': return 22;
-            case 'j': return 31;
-            case 't': return 47;
-            default: return 37;
-        }
-    }
-    // Default talk.
-    switch (pos) {
-        case 'a': return 9;
-        case 'b': return 11;
-        case 'c': return 18;
-        case 'd': return 0;
-        case 'e': return 1;
-        case 'f': return 2;
-        case 'g': return 10;
-        case 'h': return 19;
-        case 'i': return 4;
-        case 'j': return 13;
-        case 't': return 20;
-        default: return 10;
-    }
-}
-
-void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px, float bubble_alpha) {
-    const Rectangle src = speechSrcRect(tile_id);
-    const Rectangle dst{x, y, size_px, size_px};
-    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, bubble_alpha));
-}
-
-std::vector<std::string> wrapSpeechText(Font font,
-                                        const std::string& text,
-                                        float font_size,
-                                        float max_text_width) {
-    std::vector<std::string> out;
-    if (text.empty()) return out;
-    if (max_text_width <= 8.0f) {
-        out.push_back(text);
-        return out;
-    }
-
-    std::istringstream iss(text);
-    std::string word;
-    std::string line;
-    while (iss >> word) {
-        std::string candidate = line.empty() ? word : (line + " " + word);
-        const float w = MeasureTextEx(font, candidate.c_str(), font_size, 1.0f).x;
-        if (w <= max_text_width || line.empty()) {
-            line = std::move(candidate);
-        } else {
-            out.push_back(line);
-            line = word;
-        }
-    }
-    if (!line.empty()) out.push_back(std::move(line));
-    if (out.empty()) out.push_back(text);
-    return out;
-}
-
-void drawTalkBubble(Texture2D speech_tex,
-                    Font ui_font,
-                    const std::string& speech_type,
-                    const std::string& text,
-                    float head_x,
-                    float head_y,
-                    float map_scale,
-                    float map_view_width,
-                    float speech_text_size,
-                    float bubble_alpha) {
-    if (speech_tex.id == 0 || text.empty()) return;
-
-    const float ui_scale = uiScreenScale();
-    const float tile_px = std::max(12.0f, std::round(map_scale * 16.0f));
-    const float font_size = std::max(10.0f, std::round(speech_text_size * ui_scale));
-    const float max_text_width = std::max(tile_px * 4.0f, map_view_width * 0.42f);
-    const std::vector<std::string> lines = wrapSpeechText(ui_font, text, font_size, max_text_width);
-
-    float max_line_w = 0.0f;
-    for (const auto& line : lines) {
-        max_line_w = std::max(max_line_w, MeasureTextEx(ui_font, line.c_str(), font_size, 1.0f).x);
-    }
-    const float line_h = MeasureTextEx(ui_font, "Ag", font_size, 1.0f).y;
-    const float text_block_h = line_h * static_cast<float>(lines.size()) + std::max(0.0f, static_cast<float>(lines.size() - 1)) * 1.0f;
-
-    const float inner_w_px = max_line_w + kSpeechTextPadX * 2.0f;
-    const float inner_h_px = text_block_h + kSpeechTextPadY * 2.0f;
-
-    // Compact mode: short single-line text uses the minimal 3x3 bubble (no e/g/h repeats).
-    // Compact one-liners should avoid extra repeated middle rows.
-    const bool compact_one_liner = (lines.size() == 1 && lines.front().size() <= 14);
-    const bool ultra_compact_one_liner =
-        (lines.size() == 1 &&
-         lines.front().size() <= 6 &&
-         max_line_w <= tile_px * 1.25f);
-
-    const int inner_cols = compact_one_liner
-        ? 1
-        : std::max(1, static_cast<int>(std::ceil(inner_w_px / tile_px)));
-    const int mid_rows = ultra_compact_one_liner
-        ? 0
-        : (compact_one_liner
-        ? 1
-        : std::max(1, static_cast<int>(std::ceil(inner_h_px / tile_px))));
-    const int cols = inner_cols + 2;
-    const int rows = 1 + mid_rows + 1;
-
-    const float bubble_w = cols * tile_px;
-    const float bubble_h = rows * tile_px;
-    const float bubble_x = head_x - bubble_w * 0.5f;
-    const float bubble_y = head_y - bubble_h - tile_px * 1.6f;
-
-    // Top: d e...e f
-    for (int c = 0; c < cols; ++c) {
-        const int id = (c == 0) ? speechTileId(speech_type, 'd')
-                                : ((c == cols - 1) ? speechTileId(speech_type, 'f')
-                                                   : speechTileId(speech_type, 'e'));
-        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bubble_y, tile_px, bubble_alpha);
-    }
-
-    // Mid rows: a g...g b
-    for (int r = 0; r < mid_rows; ++r) {
-        const float y = bubble_y + (1 + r) * tile_px;
-        for (int c = 0; c < cols; ++c) {
-            const int id = (c == 0) ? speechTileId(speech_type, 'a')
-                                    : ((c == cols - 1) ? speechTileId(speech_type, 'b')
-                                                       : speechTileId(speech_type, 'g'));
-            drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, y, tile_px, bubble_alpha);
-        }
-    }
-
-    // Bottom: c h... i ...h t
-    const float bottom_y = bubble_y + (rows - 1) * tile_px;
-    const int center_col = cols / 2;
-    for (int c = 0; c < cols; ++c) {
-        int id = speechTileId(speech_type, 'h');
-        if (c == 0) id = speechTileId(speech_type, 'c');
-        else if (c == cols - 1) id = speechTileId(speech_type, 't');
-        else if (c == center_col) id = speechTileId(speech_type, 'i');
-        drawSpeechTile(speech_tex, id, bubble_x + c * tile_px, bottom_y, tile_px, bubble_alpha);
-    }
-
-    // Single "j" tail tile; head (O) is the target marker, not another bubble piece.
-    const float tail_x = bubble_x + center_col * tile_px;
-    const float tail_y = bottom_y + tile_px * 0.88f;
-    drawSpeechTile(speech_tex, speechTileId(speech_type, 'j'), tail_x, tail_y, tile_px, bubble_alpha);
-
-    const float text_top = bubble_y + (bubble_h - text_block_h) * 0.5f - tile_px * 0.15f;
-    for (size_t i = 0; i < lines.size(); ++i) {
-        const float lw = MeasureTextEx(ui_font, lines[i].c_str(), font_size, 1.0f).x;
-        const float text_x = bubble_x + (bubble_w - lw) * 0.5f;
-        const float text_y = text_top + static_cast<float>(i) * (line_h + 1.0f);
-        drawUiText(ui_font, lines[i], text_x, text_y, font_size, BLACK);
-    }
-}
-
 } // namespace
-
-std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return s;
-}
 
 std::string pickSpriteName(const Sprites& sprites, const MonsterStateMsg& m) {
     const std::string requested = m.sprite_name;
-    const std::string req_lower = toLower(requested);
-    const std::string name_lower = toLower(m.name);
+    const std::string req_lower = toLowerAscii(requested);
+    const std::string name_lower = toLowerAscii(m.name);
 
     const auto has_any = [&](const std::string& n) {
         return sprites.frame_count(n, Dir::S) > 0 ||
@@ -259,8 +49,8 @@ std::string pickSpriteName(const Sprites& sprites, const MonsterStateMsg& m) {
 
 std::string pickSpriteName(const Sprites& sprites, const NpcStateMsg& n) {
     const std::string requested = n.sprite_name;
-    const std::string req_lower = toLower(requested);
-    const std::string name_lower = toLower(n.name);
+    const std::string req_lower = toLowerAscii(requested);
+    const std::string name_lower = toLowerAscii(n.name);
 
     const auto has_any = [&](const std::string& k) {
         return sprites.frame_count(k, Dir::S) > 0 ||
@@ -316,103 +106,6 @@ std::pair<float, float> smoothPos(std::unordered_map<std::string, std::pair<floa
     }
     it->second = {cx, cy};
     return it->second;
-}
-
-struct CombatFxAtlas {
-    int columns = 40;
-    int tile_w = 16;
-    int tile_h = 16;
-    std::vector<int> hit_frames;
-    std::vector<int> wiff_frames;
-    std::vector<int> block_frames;
-    bool loaded = false;
-};
-
-std::vector<int> makeFramesFromSeqPairs(std::vector<std::pair<int, int>> seq_pairs, int fallback_anchor) {
-    if (seq_pairs.empty()) return {std::max(0, fallback_anchor)};
-    std::sort(seq_pairs.begin(), seq_pairs.end(), [](const auto& a, const auto& b) {
-        if (a.first != b.first) return a.first < b.first;
-        return a.second < b.second;
-    });
-    std::vector<int> out;
-    out.reserve(seq_pairs.size());
-    for (const auto& [_, tile_id] : seq_pairs) out.push_back(tile_id);
-    return out;
-}
-
-const CombatFxAtlas& combatFxAtlas() {
-    static CombatFxAtlas atlas{};
-    if (atlas.loaded) return atlas;
-    atlas.loaded = true;
-
-    tinyxml2::XMLDocument doc;
-    if (doc.LoadFile("game/assets/art/properties.tsx") != tinyxml2::XML_SUCCESS) {
-        atlas.hit_frames = {0, 1, 2};
-        atlas.wiff_frames = {40, 41, 42};
-        atlas.block_frames = {80, 81, 82};
-        return atlas;
-    }
-
-    const tinyxml2::XMLElement* root = doc.FirstChildElement("tileset");
-    if (!root) return atlas;
-    if (const char* c = root->Attribute("columns")) atlas.columns = std::max(1, std::atoi(c));
-    if (const char* tw = root->Attribute("tilewidth")) atlas.tile_w = std::max(1, std::atoi(tw));
-    if (const char* th = root->Attribute("tileheight")) atlas.tile_h = std::max(1, std::atoi(th));
-
-    std::vector<std::pair<int, int>> hit_seq_pairs;
-    std::vector<std::pair<int, int>> wiff_seq_pairs;
-    std::vector<std::pair<int, int>> block_seq_pairs;
-    std::string last_desc;
-    for (const tinyxml2::XMLElement* tile = root->FirstChildElement("tile");
-         tile != nullptr;
-         tile = tile->NextSiblingElement("tile")) {
-        int tile_id = -1;
-        tile->QueryIntAttribute("id", &tile_id);
-        if (tile_id < 0) continue;
-
-        std::string desc;
-        int seq_idx = -1;
-        const tinyxml2::XMLElement* props = tile->FirstChildElement("properties");
-        if (props) {
-            for (const tinyxml2::XMLElement* p = props->FirstChildElement("property");
-                 p != nullptr;
-                 p = p->NextSiblingElement("property")) {
-                const char* name = p->Attribute("name");
-                const char* value = p->Attribute("value");
-                if (!name || !value) continue;
-                std::string n = name;
-                std::transform(n.begin(), n.end(), n.begin(), [](unsigned char ch) {
-                    return static_cast<char>(std::tolower(ch));
-                });
-                if (n == "description") desc = value;
-                else if (n == "seq") {
-                    try { seq_idx = std::stoi(value); } catch (...) {}
-                } else if (n == "sequence") {
-                    // Backward compatibility: allow sequence index or count.
-                    try { seq_idx = std::stoi(value); } catch (...) {}
-                }
-            }
-        }
-        if (!desc.empty()) {
-            std::transform(desc.begin(), desc.end(), desc.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            last_desc = desc;
-        } else if (seq_idx >= 0 && !last_desc.empty()) {
-            desc = last_desc;
-        }
-        if (desc.empty()) continue;
-        std::string key = desc;
-        if (seq_idx < 0) seq_idx = static_cast<int>(tile_id);
-        if (key == "hit") hit_seq_pairs.push_back({seq_idx, tile_id});
-        else if (key == "wiff" || key == "whiff" || key == "miss") wiff_seq_pairs.push_back({seq_idx, tile_id});
-        else if (key == "block" || key == "blocked") block_seq_pairs.push_back({seq_idx, tile_id});
-    }
-
-    atlas.hit_frames = makeFramesFromSeqPairs(std::move(hit_seq_pairs), 0);
-    atlas.wiff_frames = makeFramesFromSeqPairs(std::move(wiff_seq_pairs), 40);
-    atlas.block_frames = makeFramesFromSeqPairs(std::move(block_seq_pairs), 80);
-    return atlas;
 }
 
 void drawScene(const Room& room,
@@ -557,10 +250,7 @@ void drawScene(const Room& room,
         tickAnimation(anim, *mon_sprites, moved, action_active || attack_t > 0.0f, dt);
         prev = {m.x, m.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
-                                        key,
-                                        m.x,
-                                        m.y,
-                                        dt,
+                                        key, m.x, m.y, dt,
                                         cfg.monster_slide_tiles_per_sec);
 
         const float mw = std::max(1, m.sprite_w_tiles) * tile_w;
@@ -595,10 +285,7 @@ void drawScene(const Room& room,
         tickAnimation(anim, *npc_sprites, moved, false, dt);
         prev = {n.x, n.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
-                                        key,
-                                        n.x,
-                                        n.y,
-                                        dt,
+                                        key, n.x, n.y, dt,
                                         cfg.monster_slide_tiles_per_sec);
         npc_visuals.push_back(NpcVisual{
             &n, npc_sprites, npc_tex, npc_ready, &anim, rx, ry
@@ -644,10 +331,7 @@ void drawScene(const Room& room,
         tickAnimation(anim, sprites, (dx != 0 || dy != 0), attack_t > 0.0f, dt);
         prev = {p.x, p.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
-                                        key,
-                                        p.x,
-                                        p.y,
-                                        dt,
+                                        key, p.x, p.y, dt,
                                         cfg.player_slide_tiles_per_sec);
 
         player_visuals.push_back(PlayerVisual{&p, rx, ry, &anim});
@@ -661,8 +345,6 @@ void drawScene(const Room& room,
         return -1;
     };
 
-    // Mouse interactions are evaluated in map-local coordinates so the same
-    // picking math works regardless of viewport offset/centering.
     const float map_ox = cfg.map_origin_x;
     const float map_oy = cfg.map_origin_y;
     const float map_vw = cfg.map_view_width > 0.0f ? cfg.map_view_width : (cfg.inventory_visible ? (GetScreenWidth() - cfg.inventory_panel_width) : static_cast<float>(GetScreenWidth()));
@@ -682,8 +364,6 @@ void drawScene(const Room& room,
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && scene_state.dragging_ground_item_id < 0 && hovered_item_id >= 0) {
         scene_state.dragging_ground_item_id = hovered_item_id;
     }
-    // Releasing a dragged ground item either throws it onto map tiles or
-    // sends a pickup intent when released over inventory.
     if (scene_state.dragging_ground_item_id >= 0 && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         if (mouse_in_map) {
             const int tx = static_cast<int>(std::floor(mouse_local.x / tile_w));
@@ -703,7 +383,7 @@ void drawScene(const Room& room,
     rlPushMatrix();
     rlTranslatef(map_ox, map_oy, 0.0f);
 
-    // Ground-space attack marker (behind sprites).
+    // Ground-space attack marker
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
         if (game_state.attack_target_monster_id != m.id) continue;
@@ -746,7 +426,6 @@ void drawScene(const Room& room,
     for (const auto& cmd : draw_cmds) {
         if (cmd.kind == 0) {
             const auto& mv = monster_visuals[cmd.idx];
-            const auto& m = *mv.msg;
             if (mv.ready) {
                 drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
             } else {
@@ -820,15 +499,15 @@ void drawScene(const Room& room,
         else if (fx.outcome == 2) frames = &atlas.wiff_frames;
         else if (fx.outcome == 3) frames = &atlas.block_frames;
         if (!frames || frames->empty()) return;
-        const float p = 1.0f - t;
+        const float progress = 1.0f - t;
         const int idx = std::max(0, std::min(static_cast<int>(frames->size()) - 1,
-                                             static_cast<int>(std::floor(p * static_cast<float>(frames->size())))));
+                                             static_cast<int>(std::floor(progress * static_cast<float>(frames->size())))));
         const int tile_id = (*frames)[static_cast<size_t>(idx)];
-        const int tx = tile_id % std::max(1, atlas.columns);
-        const int ty = tile_id / std::max(1, atlas.columns);
+        const int fx_tx = tile_id % std::max(1, atlas.columns);
+        const int fx_ty = tile_id / std::max(1, atlas.columns);
         Rectangle src{
-            static_cast<float>(tx * atlas.tile_w),
-            static_cast<float>(ty * atlas.tile_h),
+            static_cast<float>(fx_tx * atlas.tile_w),
+            static_cast<float>(fx_ty * atlas.tile_h),
             static_cast<float>(atlas.tile_w),
             static_cast<float>(atlas.tile_h)
         };
@@ -843,15 +522,9 @@ void drawScene(const Room& room,
             const std::string dmg = std::to_string(fx.value);
             const float font_size = std::max(14.0f, 16.0f * uiScreenScale());
             const Vector2 ts = MeasureTextEx(ui_font, dmg.c_str(), font_size, 1.0f);
-            const float progress = 1.0f - t;
             const float rise_px = progress * 34.0f;
             Color c{235, 48, 48, static_cast<unsigned char>(255.0f * t)};
-            drawUiText(ui_font,
-                       dmg,
-                       feet_x - ts.x * 0.5f,
-                       py - ts.y - 2.0f - rise_px,
-                       font_size,
-                       c);
+            drawUiText(ui_font, dmg, feet_x - ts.x * 0.5f, py - ts.y - 2.0f - rise_px, font_size, c);
         }
     };
 
@@ -914,7 +587,6 @@ void drawScene(const Room& room,
             ++it;
         }
     }
-
 }
 
 void drawSpeechOverlays(const Room& room,
@@ -970,23 +642,15 @@ void drawSpeechOverlays(const Room& room,
         pushBubbleFor(n.name, rx, ry);
     }
 
-    // Most recent first should appear on top, so draw oldest to newest.
     std::sort(bubbles.begin(), bubbles.end(), [](const Bubble& a, const Bubble& b) {
         return a.seq < b.seq;
     });
 
     for (const auto& b : bubbles) {
         if (speech_ready && speech_tex.id != 0) {
-            drawTalkBubble(speech_tex,
-                           ui_font,
-                           b.speech_type,
-                           b.text,
-                           b.head_x,
-                           b.head_y,
-                           cfg.map_scale,
-                           cfg.map_view_width,
-                           cfg.speech_text_size,
-                           cfg.speech_bubble_alpha);
+            drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text,
+                           b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width,
+                           cfg.speech_text_size, cfg.speech_bubble_alpha);
         } else {
             const float font_size = std::max(10.0f, cfg.speech_text_size * uiScreenScale());
             const Vector2 text_size = MeasureTextEx(ui_font, b.text.c_str(), font_size, 1.0f);
