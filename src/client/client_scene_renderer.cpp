@@ -527,18 +527,26 @@ void drawScene(const Room& room,
         const int dy = m.y - prev.second;
         const bool moved = (dx != 0 || dy != 0);
         anim.dir = dirFromFacingInt(m.facing, anim.dir);
-        auto& last_seq = scene_state.last_attack_seq_by_key[key];
         auto& attack_t = scene_state.attack_fx_timer_by_key[key];
-        if (last_seq != m.attack_anim_seq) {
-            last_seq = m.attack_anim_seq;
+        auto last_seq_it = scene_state.last_attack_seq_by_key.find(key);
+        if (last_seq_it == scene_state.last_attack_seq_by_key.end()) {
+            scene_state.last_attack_seq_by_key[key] = m.attack_anim_seq;
+            attack_t = 0.0f;
+        } else if (last_seq_it->second != m.attack_anim_seq) {
+            last_seq_it->second = m.attack_anim_seq;
             attack_t = 0.35f;
         } else {
             attack_t = std::max(0.0f, attack_t - dt);
         }
-        auto& last_outcome_seq = scene_state.last_combat_outcome_seq_by_key[key];
         auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
-        if (last_outcome_seq != m.combat_outcome_seq) {
-            last_outcome_seq = m.combat_outcome_seq;
+        auto last_outcome_it = scene_state.last_combat_outcome_seq_by_key.find(key);
+        if (last_outcome_it == scene_state.last_combat_outcome_seq_by_key.end()) {
+            scene_state.last_combat_outcome_seq_by_key[key] = m.combat_outcome_seq;
+            outcome_fx.timer = 0.0f;
+            outcome_fx.outcome = 0;
+            outcome_fx.value = 0;
+        } else if (last_outcome_it->second != m.combat_outcome_seq) {
+            last_outcome_it->second = m.combat_outcome_seq;
             outcome_fx.outcome = m.combat_outcome;
             outcome_fx.value = m.combat_value;
             outcome_fx.timer = (m.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
@@ -607,18 +615,26 @@ void drawScene(const Room& room,
         const int dx = p.x - prev.first;
         const int dy = p.y - prev.second;
         anim.dir = dirFromFacingInt(p.facing, anim.dir);
-        auto& last_seq = scene_state.last_attack_seq_by_key[key];
         auto& attack_t = scene_state.attack_fx_timer_by_key[key];
-        if (last_seq != p.attack_anim_seq) {
-            last_seq = p.attack_anim_seq;
+        auto last_seq_it = scene_state.last_attack_seq_by_key.find(key);
+        if (last_seq_it == scene_state.last_attack_seq_by_key.end()) {
+            scene_state.last_attack_seq_by_key[key] = p.attack_anim_seq;
+            attack_t = 0.0f;
+        } else if (last_seq_it->second != p.attack_anim_seq) {
+            last_seq_it->second = p.attack_anim_seq;
             attack_t = 0.35f;
         } else {
             attack_t = std::max(0.0f, attack_t - dt);
         }
-        auto& last_outcome_seq = scene_state.last_combat_outcome_seq_by_key[key];
         auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
-        if (last_outcome_seq != p.combat_outcome_seq) {
-            last_outcome_seq = p.combat_outcome_seq;
+        auto last_outcome_it = scene_state.last_combat_outcome_seq_by_key.find(key);
+        if (last_outcome_it == scene_state.last_combat_outcome_seq_by_key.end()) {
+            scene_state.last_combat_outcome_seq_by_key[key] = p.combat_outcome_seq;
+            outcome_fx.timer = 0.0f;
+            outcome_fx.outcome = 0;
+            outcome_fx.value = 0;
+        } else if (last_outcome_it->second != p.combat_outcome_seq) {
+            last_outcome_it->second = p.combat_outcome_seq;
             outcome_fx.outcome = p.combat_outcome;
             outcome_fx.value = p.combat_value;
             outcome_fx.timer = (p.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
