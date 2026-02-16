@@ -314,6 +314,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
             result.event_text = mon.name + " hit " + p.data.username + " for " + std::to_string(damage);
         }
 
+        // ---- Player Death ---- //
         if (p.hp <= 0) {
             p.attack_target_monster_id = -1;
             p.hp = p.max_hp;

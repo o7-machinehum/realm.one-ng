@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 
 using namespace tinyxml2;
@@ -103,6 +104,7 @@ bool RoomRenderer::load(const Room& room) {
         rt.columns = tsx.columns;
         rt.tex = LoadTexture(texPath.string().c_str());
         if (rt.tex.id == 0) { unload(); return false; }
+        SetTextureFilter(rt.tex, TEXTURE_FILTER_POINT);
 
         sets_.push_back(rt);
     }
@@ -141,12 +143,14 @@ void RoomRenderer::drawLayer(const Room& room, const RoomLayer& layer, float sca
             int sy = (localId / ts->columns) * ts->tileH;
 
             Rectangle src{ (float)sx, (float)sy, (float)ts->tileW, (float)ts->tileH };
-            Rectangle dst{
-                origin.x + (float)x * room.tile_width() * scale,
-                origin.y + (float)y * room.tile_height() * scale,
-                (float)room.tile_width() * scale,
-                (float)room.tile_height() * scale
-            };
+
+            float tw = (float)room.tile_width() * scale;
+            float th = (float)room.tile_height() * scale;
+            float dx0 = floorf(origin.x + (float)x * tw);
+            float dy0 = floorf(origin.y + (float)y * th);
+            float dx1 = floorf(origin.x + (float)(x + 1) * tw);
+            float dy1 = floorf(origin.y + (float)(y + 1) * th);
+            Rectangle dst{ dx0, dy0, dx1 - dx0, dy1 - dy0 };
 
             DrawTexturePro(ts->tex, src, dst, Vector2{0,0}, 0.0f, WHITE);
         }
