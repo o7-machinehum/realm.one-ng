@@ -1,7 +1,7 @@
 // Top-level network server: owns the ENet host and the game-loop thread.
 #pragma once
 
-#include <enet/enet.h>
+#include "enet_compat.h"
 #include <thread>
 #include <stop_token>
 

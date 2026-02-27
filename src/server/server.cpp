@@ -1,4 +1,4 @@
-#include <enet/enet.h>
+#include "enet_compat.h"
 
 #include <chrono>
 #include <iostream>

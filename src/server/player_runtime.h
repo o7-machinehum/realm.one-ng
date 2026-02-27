@@ -4,7 +4,7 @@
 #include "auth_db.h"
 #include "combat_types.h"
 
-#include <enet/enet.h>
+#include "enet_compat.h"
 
 #include <cstdint>
 

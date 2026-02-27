@@ -1,0 +1,220 @@
+name: Build (Windows, Linux, macOS)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: macOS
+            os: macos-latest
+            kind: macos
+          - name: Windows (MSYS2)
+            os: windows-latest
+            kind: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install macOS deps
+        if: matrix.target.kind == 'macos'
+        run: |
+          brew update
+          brew install cmake ninja pkg-config raylib tinyxml2 cereal enet sqlite openssl
+
+      - name: Setup MSYS2
+        if: matrix.target.kind == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-raylib
+            mingw-w64-x86_64-tinyxml2
+            mingw-w64-x86_64-cereal
+            mingw-w64-x86_64-enet
+            mingw-w64-x86_64-sqlite3
+            mingw-w64-x86_64-openssl
+
+      - name: Configure + build (macOS, client only)
+        if: matrix.target.kind == 'macos'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SERVER=OFF \
+            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
+          cmake --build build --target client --parallel
+
+      - name: Configure + build (Windows/MSYS2)
+        if: matrix.target.kind == 'windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target client server --parallel
+
+      - name: Package distribution (macOS)
+        if: matrix.target.kind == 'macos'
+        run: |
+          mkdir -p dist/realm_one/lib
+          cp build/client dist/realm_one/
+          cp -r data game dist/realm_one/
+          otool -L dist/realm_one/client | awk '/homebrew/{print $1}' | while read lib; do
+            cp -n "$lib" dist/realm_one/lib/
+            install_name_tool -change "$lib" "@executable_path/lib/$(basename "$lib")" dist/realm_one/client
+          done
+
+      - name: Package distribution (Windows)
+        if: matrix.target.kind == 'windows'
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/realm_one
+          cp build/client.exe build/server.exe dist/realm_one/
+          cp -r data game dist/realm_one/
+          for bin in dist/realm_one/client.exe dist/realm_one/server.exe; do
+            ldd "$bin" | awk '/mingw64/{print $3}' | xargs -I{} cp -n {} dist/realm_one/
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target.kind }}-build
+          path: dist
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build pkg-config \
+            libtinyxml2-dev libcereal-dev libenet-dev libsqlite3-dev libssl-dev \
+            xorg-dev libgl-dev
+          git clone --depth 1 https://github.com/raysan5/raylib.git /tmp/raylib
+          cmake -S /tmp/raylib -B /tmp/raylib/build -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr
+          cmake --build /tmp/raylib/build --parallel
+          sudo cmake --install /tmp/raylib/build
+
+      - name: Configure + build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target client server --parallel
+
+      - name: Download linuxdeploy
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      - name: Package client AppImage
+        run: |
+          mkdir -p ClientAppDir/usr/bin
+          cp build/client ClientAppDir/usr/bin/client
+          cp -r data ClientAppDir/usr/bin/data
+          cp -r game ClientAppDir/usr/bin/game
+
+          cat > realm_one_client.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=realm_one_client
+          Exec=client
+          Icon=realm_one_client
+          Categories=Game;
+          Terminal=false
+          EOF
+
+          cp game/assets/icon.png realm_one_client.png
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy-x86_64.AppImage \
+            --appdir ClientAppDir \
+            --desktop-file realm_one_client.desktop \
+            --icon-file realm_one_client.png \
+            --executable ClientAppDir/usr/bin/client \
+            --output appimage
+
+      - name: Package server AppImage
+        run: |
+          mkdir -p ServerAppDir/usr/bin
+          cp build/server ServerAppDir/usr/bin/server
+          cp -r data ServerAppDir/usr/bin/data
+          cp -r game ServerAppDir/usr/bin/game
+
+          cat > realm_one_server.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=realm_one_server
+          Exec=server
+          Icon=realm_one_server
+          Categories=Game;
+          Terminal=true
+          EOF
+
+          cp game/assets/icon.png realm_one_server.png
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy-x86_64.AppImage \
+            --appdir ServerAppDir \
+            --desktop-file realm_one_server.desktop \
+            --icon-file realm_one_server.png \
+            --executable ServerAppDir/usr/bin/server \
+            --output appimage
+
+      - name: Package distribution
+        run: |
+          mkdir -p dist/realm_one
+          mv realm_one_client-x86_64.AppImage dist/realm_one/realm_one_client.AppImage
+          mv realm_one_server-x86_64.AppImage dist/realm_one/realm_one_server.AppImage
+          cp -r data game dist/realm_one/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist
+
+  release:
+    name: Release
+    needs: [build, linux]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip artifacts
+        run: |
+          cd artifacts/linux-build && zip -r ../../realm_one-linux.zip realm_one && cd ../..
+          cd artifacts/windows-build && zip -r ../../realm_one-windows.zip realm_one && cd ../..
+          cd artifacts/macos-build && zip -r ../../realm_one-macos.zip realm_one && cd ../..
+
+      - name: Update latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest \
+            --title "Latest Build" \
+            --notes "Automated build from the latest commit on master." \
+            --prerelease \
+            realm_one-linux.zip \
+            realm_one-windows.zip \
+            realm_one-macos.zip

@@ -1,4 +1,4 @@
-#include <enet/enet.h>
+#include "enet_compat.h"
 
 #include <cstdint>
 #include <cstdlib>

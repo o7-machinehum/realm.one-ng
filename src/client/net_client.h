@@ -1,6 +1,6 @@
 #pragma once
 
-#include <enet/enet.h>
+#include "enet_compat.h"
 #include <thread>
 #include <atomic>
 

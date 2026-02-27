@@ -4,6 +4,8 @@ project(quick_game CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(BUILD_SERVER "Build the server executable" ON)
+
 find_package(raylib REQUIRED)
 find_package(tinyxml2 REQUIRED)
 find_package(cereal REQUIRED)
@@ -12,7 +14,9 @@ find_package(OpenSSL REQUIRED)
 # ENet doesn't have a CMake config, use pkg-config
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ENET REQUIRED libenet)
-pkg_check_modules(SQLITE3 REQUIRED sqlite3)
+if(BUILD_SERVER)
+    pkg_check_modules(SQLITE3 REQUIRED sqlite3)
+endif()
 
 # Shared code
 add_library(qg_common
@@ -54,7 +58,7 @@ add_executable(client
 )
 
 target_link_libraries(client PRIVATE
-    ${ENET_LIBRARIES}
+    ${ENET_LINK_LIBRARIES}
     qg_common
     raylib
 )
@@ -66,6 +70,7 @@ target_include_directories(client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
 
+if(BUILD_SERVER)
 # ----- Server
 add_executable(server
     src/server/server.cpp
@@ -84,8 +89,8 @@ add_executable(server
 )
 
 target_link_libraries(server PRIVATE
-    ${ENET_LIBRARIES}
-    ${SQLITE3_LIBRARIES}
+    ${ENET_LINK_LIBRARIES}
+    ${SQLITE3_LINK_LIBRARIES}
     qg_common
     raylib
 )
@@ -97,6 +102,7 @@ target_include_directories(server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
+endif()
 
 # ----- Tests
 add_executable(test_room
@@ -113,13 +119,14 @@ target_link_libraries(test_room PRIVATE qg_common raylib)
 add_executable(test_sprites src/tests/test_sprites.cpp)
 target_link_libraries(test_sprites PRIVATE qg_common raylib)
 
+if(BUILD_SERVER)
 # ---- test-client/server
 add_executable(client_server_ser_de
     src/tests/client_server_ser_de.cpp
     src/client/room_render.cpp
 )
 target_link_libraries(client_server_ser_de PRIVATE
-    ${ENET_LIBRARIES}
+    ${ENET_LINK_LIBRARIES}
     qg_common
     cereal::cereal
     raylib
@@ -130,3 +137,4 @@ target_include_directories(client_server_ser_de PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/server
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )
+endif()
