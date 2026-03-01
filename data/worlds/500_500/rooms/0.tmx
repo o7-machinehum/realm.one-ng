@@ -367,15 +367,26 @@
 </data>
  </layer>
  <objectgroup id="14" name="Portals">
+  <properties>
+   <property name="p1" type="class" propertytype="portal">
+    <properties>
+     <property name="room" value="house.tmx"/>
+     <property name="x" type="int" value="14"/>
+     <property name="y" type="int" value="17"/>
+    </properties>
+   </property>
+  </properties>
   <object id="1" x="224" y="143.625" width="16.25" height="16.375">
    <properties>
-    <property name="p1" type="class"/>
+    <property name="p1" type="class" propertytype="portal">
+     <properties>
+      <property name="room" value="n1.tmx"/>
+      <property name="x" type="int" value="14"/>
+      <property name="y" type="int" value="5"/>
+     </properties>
+    </property>
    </properties>
   </object>
-  <object id="2" x="320.273" y="111.272" width="16" height="16">
-   <properties>
-    <property name="p1" type="class"/>
-   </properties>
-  </object>
+  <object id="2" x="320.273" y="111.272" width="16" height="16"/>
  </objectgroup>
 </map>

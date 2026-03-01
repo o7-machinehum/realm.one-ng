@@ -379,10 +379,10 @@
  <objectgroup id="14" name="Portals">
   <object id="2" x="224.37" y="287.966" width="15.8125" height="16.8409">
    <properties>
-    <property name="p1" type="class" propertytype="potal">
+    <property name="p1" type="class" propertytype="portal">
      <properties>
       <property name="room" value="0"/>
-      <property name="world" value="500_500"/>
+      <property name="world" value=""/>
       <property name="x" type="int" value="20"/>
       <property name="y" type="int" value="9"/>
      </properties>

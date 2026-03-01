@@ -103,7 +103,7 @@
                     "value": 0
                 }
             ],
-            "name": "potal",
+            "name": "portal",
             "type": "class",
             "useAs": [
                 "property",
