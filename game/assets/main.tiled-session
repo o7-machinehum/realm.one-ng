@@ -93,11 +93,11 @@
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 3,
-            "selectedLayer": 15,
+            "scale": 5.5,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 249.83333333333334,
-                "y": 7.333333333333343
+                "x": 255.90909090909093,
+                "y": 9.09090909090908
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
@@ -115,11 +115,11 @@
             "expandedObjectLayers": [
                 11
             ],
-            "scale": 3,
+            "scale": 1.5,
             "selectedLayer": 15,
             "viewCenter": {
-                "x": 223.16666666666663,
-                "y": -116
+                "x": 247.66666666666669,
+                "y": -74.66666666666663
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx": {
@@ -131,11 +131,11 @@
             }
         },
         "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx": {
-            "scale": 2.1335416666666664,
-            "selectedLayer": 9,
+            "scale": 5.5,
+            "selectedLayer": 0,
             "viewCenter": {
-                "x": 312.8600722585685,
-                "y": 281.6912410897374
+                "x": 262.0909090909091,
+                "y": 319.0909090909091
             }
         },
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx": {
@@ -249,7 +249,7 @@
     "last.imagePath": "/home/machinehum/the_island/game/assets/art",
     "last.worldFilePath": "/home/machinehum/the_island/data/worlds",
     "loadedWorlds": [
-        "/home/machinehum/the_island/data/worlds/500_500/500_500.world"
+        "/home/machinehum/the_island/data/worlds/globe.world"
     ],
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 16,
