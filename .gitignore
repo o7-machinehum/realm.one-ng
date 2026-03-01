@@ -2,3 +2,4 @@ data/game.db
 build/
 tags
 data/keys/
+compile_commands.json

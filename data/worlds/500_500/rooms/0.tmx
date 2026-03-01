@@ -5,6 +5,7 @@
  <tileset firstgid="2001" source="../../../../game/assets/art/npc_test.tsx"/>
  <tileset firstgid="2129" source="../../../../game/assets/art/materials2.tsx"/>
  <tileset firstgid="2193" source="../../../../game/assets/art/overworld.tsx"/>
+ <tileset firstgid="3633" source="../../../../game/assets/art/slime.tsx"/>
  <layer id="1" name="L0" width="30" height="20">
   <data encoding="csv">
 2476,2476,2476,2476,2476,2476,2476,2476,2476,2476,2476,2476,2476,2476,2477,2598,2598,2561,2598,2601,2475,2476,2476,2476,2476,2476,2476,2476,2476,2476,
@@ -163,7 +164,7 @@
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2001,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2009,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,3633,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -368,26 +369,12 @@
  <objectgroup id="14" name="Portals">
   <object id="1" x="224" y="143.625" width="16.25" height="16.375">
    <properties>
-    <property name="p1" type="class" propertytype="potal">
-     <properties>
-      <property name="room" value="n1"/>
-      <property name="world" value="500_500"/>
-      <property name="x" type="int" value="14"/>
-      <property name="y" type="int" value="9"/>
-     </properties>
-    </property>
+    <property name="p1" type="class"/>
    </properties>
   </object>
   <object id="2" x="320.273" y="111.272" width="16" height="16">
    <properties>
-    <property name="p1" type="class" propertytype="potal">
-     <properties>
-      <property name="room" value="house"/>
-      <property name="world" value="500_500"/>
-      <property name="x" type="int" value="14"/>
-      <property name="y" type="int" value="16"/>
-     </properties>
-    </property>
+    <property name="p1" type="class"/>
    </properties>
   </object>
  </objectgroup>

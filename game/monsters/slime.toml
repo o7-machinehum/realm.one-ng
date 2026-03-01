@@ -1,0 +1,17 @@
+name = "Slime"
+sprite_tileset = "slime.tsx"
+monster_size = "1x1"
+
+max_hp = 10
+
+attack = 2
+evasion = 2
+shielding = 3
+armor = 1
+
+exp_reward = 5
+speed_ms = 200
+
+[[drops]]
+item = "wooden_sword"
+chance = 0.20
