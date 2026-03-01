@@ -173,6 +173,14 @@ Font loadUIFont(bool& owns_font) {
     return GetFontDefault();
 }
 
+float uiScreenScale() {
+    constexpr float kUiBaseW = 1200.0f;
+    constexpr float kUiBaseH = 760.0f;
+    const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
+    const float sy = static_cast<float>(GetScreenHeight()) / kUiBaseH;
+    return std::max(0.85f, std::min(2.2f, std::min(sx, sy)));
+}
+
 void drawUiText(Font font, const std::string& text, float x, float y, float size, Color color) {
     DrawTextEx(font, text.c_str(), Vector2{x, y}, size, 1.0f, color);
 }
@@ -183,6 +191,30 @@ void drawHealthBar(float x, float y, float w, int hp, int max_hp) {
     const float pct = std::max(0.0f, std::min(1.0f, static_cast<float>(hp) / static_cast<float>(max_hp)));
     const Color c = (pct > 0.6f) ? LIME : (pct > 0.3f ? ORANGE : RED);
     DrawRectangle(static_cast<int>(x + 1), static_cast<int>(y + 1), static_cast<int>((w - 2) * pct), 3, c);
+}
+
+void drawAtlasTile(Texture2D tex, int tile_id, int columns,
+                   int tile_w, int tile_h, Rectangle dst, Color tint) {
+    const int tx = tile_id % std::max(1, columns);
+    const int ty = tile_id / std::max(1, columns);
+    Rectangle src{
+        static_cast<float>(tx * tile_w),
+        static_cast<float>(ty * tile_h),
+        static_cast<float>(tile_w),
+        static_cast<float>(tile_h)
+    };
+    DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, tint);
+}
+
+void drawFloatingText(Font font, const std::string& text,
+                      float center_x, float base_y,
+                      Color color, float progress, float rise_px) {
+    const float font_size = std::max(14.0f, 16.0f * uiScreenScale());
+    const Vector2 size = MeasureTextEx(font, text.c_str(), font_size, 1.0f);
+    const float x = center_x - size.x * 0.5f;
+    const float y = base_y - size.y - progress * rise_px;
+    color.a = static_cast<unsigned char>(static_cast<float>(color.a) * (1.0f - progress));
+    DrawTextEx(font, text.c_str(), Vector2{x, y}, font_size, 1.0f, color);
 }
 
 int slotAtPoint(const Rectangle& panel, const Vector2& p, int cols, float slot_size, float gap, int max_slots) {

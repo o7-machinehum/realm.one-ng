@@ -14,14 +14,6 @@ constexpr int kSpeechCols = 9;
 constexpr float kSpeechTilePx = 16.0f;
 constexpr float kSpeechTextPadX = 8.0f;
 constexpr float kSpeechTextPadY = 6.0f;
-constexpr float kUiBaseW = 1200.0f;
-constexpr float kUiBaseH = 760.0f;
-
-float uiScreenScale() {
-    const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
-    const float sy = static_cast<float>(GetScreenHeight()) / kUiBaseH;
-    return std::max(0.85f, std::min(2.2f, std::min(sx, sy)));
-}
 
 Rectangle speechSrcRect(int tile_id) {
     const int tx = tile_id % kSpeechCols;

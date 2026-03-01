@@ -47,8 +47,22 @@ void drawActor(const Sprites& sprites,
                Color tint);
 
 Font loadUIFont(bool& owns_font);
+float uiScreenScale();
 void drawUiText(Font font, const std::string& text, float x, float y, float size, Color color);
 void drawHealthBar(float x, float y, float w, int hp, int max_hp);
+
+// Draw a single tile from a tilesheet atlas. Computes the source rect from
+// tile_id using the grid layout (columns, tile_w, tile_h) and draws into dst.
+void drawAtlasTile(Texture2D tex, int tile_id, int columns,
+                   int tile_w, int tile_h, Rectangle dst, Color tint);
+
+// Draw text that floats upward and fades out. Centered horizontally at center_x,
+// starting at base_y and rising by rise_px * progress. Alpha fades to zero as
+// progress goes from 0 (just appeared) to 1 (fully faded).
+void drawFloatingText(Font font, const std::string& text,
+                      float center_x, float base_y,
+                      Color color, float progress, float rise_px);
+
 int slotAtPoint(const Rectangle& panel, const Vector2& p, int cols, float slot_size, float gap, int max_slots);
 
 } // namespace client

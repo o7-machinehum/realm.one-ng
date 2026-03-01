@@ -13,17 +13,111 @@
 namespace client {
 namespace {
 
-constexpr float kUiBaseW = 1200.0f;
-constexpr float kUiBaseH = 760.0f;
 constexpr float kCombatFxDurationSec = 0.95f;
 constexpr float kCombatFxOpacity = 0.60f;
 constexpr float kCombatFxYOffsetPx = 5.0f;
 constexpr int kCombatOutcomeHit = 1;
 
-float uiScreenScale() {
-    const float sx = static_cast<float>(GetScreenWidth()) / kUiBaseW;
-    const float sy = static_cast<float>(GetScreenHeight()) / kUiBaseH;
-    return std::max(0.85f, std::min(2.2f, std::min(sx, sy)));
+struct ResolvedSheet {
+    const Sprites* sprites;
+    Texture2D tex;
+    bool ready;
+};
+
+ResolvedSheet resolveSheet(const std::function<SpriteSheetView(const std::string&)>& view_fn,
+                           const std::string& tileset,
+                           const Sprites& fallback, Texture2D fallback_tex, bool fallback_ready) {
+    SpriteSheetView sheet_view{};
+    if (view_fn) sheet_view = view_fn(tileset);
+    const Sprites* s = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : &fallback;
+    const Texture2D t = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : fallback_tex;
+    const bool r = (sheet_view.ready && sheet_view.sprites) ? true : fallback_ready;
+    return {s, t, r};
+}
+
+float updateAttackTimer(SceneState& state, const std::string& key, uint32_t current_seq, float dt) {
+    auto& timer = state.attack_fx_timer_by_key[key];
+    auto last_seq_it = state.last_attack_seq_by_key.find(key);
+    if (last_seq_it == state.last_attack_seq_by_key.end()) {
+        state.last_attack_seq_by_key[key] = current_seq;
+        timer = 0.0f;
+    } else if (last_seq_it->second != current_seq) {
+        last_seq_it->second = current_seq;
+        timer = 0.35f;
+    } else {
+        timer = std::max(0.0f, timer - dt);
+    }
+    return timer;
+}
+
+void updateCombatOutcomeFxState(SceneState& state, const std::string& key,
+                                uint32_t current_seq, int outcome, int value, float dt) {
+    auto& fx = state.combat_outcome_fx_by_key[key];
+    auto last_it = state.last_combat_outcome_seq_by_key.find(key);
+    if (last_it == state.last_combat_outcome_seq_by_key.end()) {
+        state.last_combat_outcome_seq_by_key[key] = current_seq;
+        fx.timer = 0.0f;
+        fx.outcome = 0;
+        fx.value = 0;
+    } else if (last_it->second != current_seq) {
+        last_it->second = current_seq;
+        fx.outcome = outcome;
+        fx.value = value;
+        fx.timer = (outcome == 0) ? 0.0f : kCombatFxDurationSec;
+    } else {
+        fx.timer = std::max(0.0f, fx.timer - dt);
+    }
+}
+
+const Frame* findFrameForItem(const Sprites& sprites, const std::string& sprite_name, ClipKind kind) {
+    const Frame* fr = sprites.frame(sprite_name, Dir::S, 0, kind);
+    if (!fr && kind == ClipKind::Death) fr = sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
+    if (!fr) fr = sprites.frame(sprite_name, Dir::W, 0, ClipKind::Move);
+    if (!fr) fr = sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
+    return fr;
+}
+
+// Draws the combat outcome effect (hit/miss/block splat sprite) and, for hits,
+// a red damage number that floats upward and fades out.
+void drawCombatOutcomeFx(const SceneState& state, const std::string& key,
+                         float feet_x, float feet_y,
+                         Texture2D combat_fx_tex, bool combat_fx_ready,
+                         Font ui_font, float tile_w, float tile_h) {
+    auto it = state.combat_outcome_fx_by_key.find(key);
+    if (it == state.combat_outcome_fx_by_key.end()) return;
+    const SceneState::CombatOutcomeFx& fx = it->second;
+    if (!combat_fx_ready || combat_fx_tex.id == 0) return;
+    if (fx.timer <= 0.0f || fx.outcome <= 0) return;
+
+    const CombatFxAtlas& atlas = combatFxAtlas();
+    const float t = std::clamp(fx.timer / kCombatFxDurationSec, 0.0f, 1.0f);
+    const float progress = 1.0f - t; // 0 = just started, 1 = fully elapsed
+
+    // Pick the frame sequence for the outcome type (hit/miss/block)
+    const std::vector<int>* frames = nullptr;
+    if (fx.outcome == 1) frames = &atlas.hit_frames;
+    else if (fx.outcome == 2) frames = &atlas.wiff_frames;
+    else if (fx.outcome == 3) frames = &atlas.block_frames;
+    if (!frames || frames->empty()) return;
+
+    // Draw the splat sprite from the combat FX atlas
+    const int idx = std::clamp(static_cast<int>(progress * static_cast<float>(frames->size())),
+                               0, static_cast<int>(frames->size()) - 1);
+    const float sz = std::max(tile_w, tile_h) * 1.1f;
+    const float px = feet_x - sz * 0.5f;
+    const float py = feet_y - tile_h * 1.40f + kCombatFxYOffsetPx;
+    Color tint = WHITE;
+    tint.a = static_cast<unsigned char>(255.0f * kCombatFxOpacity);
+    drawAtlasTile(combat_fx_tex, (*frames)[static_cast<size_t>(idx)],
+                  atlas.columns, atlas.tile_w, atlas.tile_h,
+                  Rectangle{px, py, sz, sz}, tint);
+
+    // Floating damage number (rises 34px, fades out over the duration)
+    if (fx.outcome == kCombatOutcomeHit && fx.value > 0) {
+        drawFloatingText(ui_font, std::to_string(fx.value),
+                         feet_x, py - 2.0f,
+                         Color{235, 48, 48, 255}, progress, 34.0f);
+    }
 }
 
 } // namespace
@@ -129,8 +223,11 @@ void drawScene(const Room& room,
     out.pickup_ground_item.reset();
     scene_state.attack_fx_t += dt;
 
+    // Compute
     const float tile_w = room.tile_width() * cfg.map_scale;
     const float tile_h = room.tile_height() * cfg.map_scale;
+
+
     std::vector<std::pair<int, Rectangle>> monster_click_boxes;
     struct MonsterVisual {
         const MonsterStateMsg* msg = nullptr;
@@ -205,11 +302,7 @@ void drawScene(const Room& room,
     };
 
     for (const auto& m : game_state.monsters) {
-        SpriteSheetView sheet_view{};
-        if (monster_sheet_view) sheet_view = monster_sheet_view(m.sprite_tileset);
-        const Sprites* mon_sprites = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : &sprites;
-        const Texture2D mon_tex = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : character_tex;
-        const bool mon_ready = (sheet_view.ready && sheet_view.sprites) ? true : sprite_ready;
+        const auto [mon_sprites, mon_tex, mon_ready] = resolveSheet(monster_sheet_view, m.sprite_tileset, sprites, character_tex, sprite_ready);
 
         const std::string key = "m:" + std::to_string(m.id);
         auto& anim = scene_state.anim_by_key[key];
@@ -220,32 +313,8 @@ void drawScene(const Room& room,
         const int dy = m.y - prev.second;
         const bool moved = (dx != 0 || dy != 0);
         anim.dir = dirFromFacingInt(m.facing, anim.dir);
-        auto& attack_t = scene_state.attack_fx_timer_by_key[key];
-        auto last_seq_it = scene_state.last_attack_seq_by_key.find(key);
-        if (last_seq_it == scene_state.last_attack_seq_by_key.end()) {
-            scene_state.last_attack_seq_by_key[key] = m.attack_anim_seq;
-            attack_t = 0.0f;
-        } else if (last_seq_it->second != m.attack_anim_seq) {
-            last_seq_it->second = m.attack_anim_seq;
-            attack_t = 0.35f;
-        } else {
-            attack_t = std::max(0.0f, attack_t - dt);
-        }
-        auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
-        auto last_outcome_it = scene_state.last_combat_outcome_seq_by_key.find(key);
-        if (last_outcome_it == scene_state.last_combat_outcome_seq_by_key.end()) {
-            scene_state.last_combat_outcome_seq_by_key[key] = m.combat_outcome_seq;
-            outcome_fx.timer = 0.0f;
-            outcome_fx.outcome = 0;
-            outcome_fx.value = 0;
-        } else if (last_outcome_it->second != m.combat_outcome_seq) {
-            last_outcome_it->second = m.combat_outcome_seq;
-            outcome_fx.outcome = m.combat_outcome;
-            outcome_fx.value = m.combat_value;
-            outcome_fx.timer = (m.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
-        } else {
-            outcome_fx.timer = std::max(0.0f, outcome_fx.timer - dt);
-        }
+        const float attack_t = updateAttackTimer(scene_state, key, m.attack_anim_seq, dt);
+        updateCombatOutcomeFxState(scene_state, key, m.combat_outcome_seq, m.combat_outcome, m.combat_value, dt);
         const bool action_active = target_in_range && (m.id == game_state.attack_target_monster_id);
         tickAnimation(anim, *mon_sprites, moved, action_active || attack_t > 0.0f, dt);
         prev = {m.x, m.y};
@@ -267,11 +336,7 @@ void drawScene(const Room& room,
     }
 
     for (const auto& n : game_state.npcs) {
-        SpriteSheetView sheet_view{};
-        if (monster_sheet_view) sheet_view = monster_sheet_view(n.sprite_tileset);
-        const Sprites* npc_sprites = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : &sprites;
-        const Texture2D npc_tex = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : character_tex;
-        const bool npc_ready = (sheet_view.ready && sheet_view.sprites) ? true : sprite_ready;
+        const auto [npc_sprites, npc_tex, npc_ready] = resolveSheet(monster_sheet_view, n.sprite_tileset, sprites, character_tex, sprite_ready);
 
         const std::string key = "n:" + std::to_string(n.id);
         auto& anim = scene_state.anim_by_key[key];
@@ -302,32 +367,8 @@ void drawScene(const Room& room,
         const int dx = p.x - prev.first;
         const int dy = p.y - prev.second;
         anim.dir = dirFromFacingInt(p.facing, anim.dir);
-        auto& attack_t = scene_state.attack_fx_timer_by_key[key];
-        auto last_seq_it = scene_state.last_attack_seq_by_key.find(key);
-        if (last_seq_it == scene_state.last_attack_seq_by_key.end()) {
-            scene_state.last_attack_seq_by_key[key] = p.attack_anim_seq;
-            attack_t = 0.0f;
-        } else if (last_seq_it->second != p.attack_anim_seq) {
-            last_seq_it->second = p.attack_anim_seq;
-            attack_t = 0.35f;
-        } else {
-            attack_t = std::max(0.0f, attack_t - dt);
-        }
-        auto& outcome_fx = scene_state.combat_outcome_fx_by_key[key];
-        auto last_outcome_it = scene_state.last_combat_outcome_seq_by_key.find(key);
-        if (last_outcome_it == scene_state.last_combat_outcome_seq_by_key.end()) {
-            scene_state.last_combat_outcome_seq_by_key[key] = p.combat_outcome_seq;
-            outcome_fx.timer = 0.0f;
-            outcome_fx.outcome = 0;
-            outcome_fx.value = 0;
-        } else if (last_outcome_it->second != p.combat_outcome_seq) {
-            last_outcome_it->second = p.combat_outcome_seq;
-            outcome_fx.outcome = p.combat_outcome;
-            outcome_fx.value = p.combat_value;
-            outcome_fx.timer = (p.combat_outcome == 0) ? 0.0f : kCombatFxDurationSec;
-        } else {
-            outcome_fx.timer = std::max(0.0f, outcome_fx.timer - dt);
-        }
+        const float attack_t = updateAttackTimer(scene_state, key, p.attack_anim_seq, dt);
+        updateCombatOutcomeFxState(scene_state, key, p.combat_outcome_seq, p.combat_outcome, p.combat_value, dt);
         tickAnimation(anim, sprites, (dx != 0 || dy != 0), attack_t > 0.0f, dt);
         prev = {p.x, p.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
@@ -397,10 +438,7 @@ void drawScene(const Room& room,
         if (itv.msg->id == scene_state.dragging_ground_item_id) continue;
         if (itv.ready && itv.sprites) {
             const ClipKind kind = itemClipKind(*itv.msg);
-            const Frame* fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, kind);
-            if (!fr && kind == ClipKind::Death) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, ClipKind::Move);
-            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::W, 0, ClipKind::Move);
-            if (!fr) fr = itv.sprites->frame(itv.msg->sprite_name, Dir::S, 0, ClipKind::Move);
+            const Frame* fr = findFrameForItem(*itv.sprites, itv.msg->sprite_name, kind);
             if (fr) {
                 const Rectangle src = fr->rect();
                 Rectangle dst{itv.tile_box.x, itv.tile_box.y, src.width * cfg.map_scale, src.height * cfg.map_scale};
@@ -468,10 +506,7 @@ void drawScene(const Room& room,
         if (drag_item) {
             if (drag_item->ready && drag_item->sprites) {
                 const ClipKind kind = itemClipKind(*drag_item->msg);
-                const Frame* fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, kind);
-                if (!fr && kind == ClipKind::Death) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, ClipKind::Move);
-                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::W, 0, ClipKind::Move);
-                if (!fr) fr = drag_item->sprites->frame(drag_item->msg->sprite_name, Dir::S, 0, ClipKind::Move);
+                const Frame* fr = findFrameForItem(*drag_item->sprites, drag_item->msg->sprite_name, kind);
                 if (fr) {
                     const Rectangle src = fr->rect();
                     Rectangle dst{mouse_local.x - (src.width * cfg.map_scale * 0.5f),
@@ -486,55 +521,14 @@ void drawScene(const Room& room,
         }
     }
 
-    auto drawCombatOutcomeFx = [&](const std::string& key, float feet_x, float feet_y) {
-        auto it = scene_state.combat_outcome_fx_by_key.find(key);
-        if (it == scene_state.combat_outcome_fx_by_key.end()) return;
-        const SceneState::CombatOutcomeFx& fx = it->second;
-        if (!combat_fx_ready || combat_fx_tex.id == 0) return;
-        if (fx.timer <= 0.0f || fx.outcome <= 0) return;
-        const CombatFxAtlas& atlas = combatFxAtlas();
-        const float t = std::max(0.0f, std::min(1.0f, fx.timer / kCombatFxDurationSec));
-        const std::vector<int>* frames = nullptr;
-        if (fx.outcome == 1) frames = &atlas.hit_frames;
-        else if (fx.outcome == 2) frames = &atlas.wiff_frames;
-        else if (fx.outcome == 3) frames = &atlas.block_frames;
-        if (!frames || frames->empty()) return;
-        const float progress = 1.0f - t;
-        const int idx = std::max(0, std::min(static_cast<int>(frames->size()) - 1,
-                                             static_cast<int>(std::floor(progress * static_cast<float>(frames->size())))));
-        const int tile_id = (*frames)[static_cast<size_t>(idx)];
-        const int fx_tx = tile_id % std::max(1, atlas.columns);
-        const int fx_ty = tile_id / std::max(1, atlas.columns);
-        Rectangle src{
-            static_cast<float>(fx_tx * atlas.tile_w),
-            static_cast<float>(fx_ty * atlas.tile_h),
-            static_cast<float>(atlas.tile_w),
-            static_cast<float>(atlas.tile_h)
-        };
-        const float sz = std::max(tile_w, tile_h) * 1.1f;
-        const float px = feet_x - sz * 0.5f;
-        const float py = feet_y - tile_h * 1.40f + kCombatFxYOffsetPx;
-        Rectangle dst{px, py, sz, sz};
-        Color tint = WHITE;
-        tint.a = static_cast<unsigned char>(255.0f * kCombatFxOpacity);
-        DrawTexturePro(combat_fx_tex, src, dst, Vector2{0, 0}, 0.0f, tint);
-        if (fx.outcome == kCombatOutcomeHit && fx.value > 0) {
-            const std::string dmg = std::to_string(fx.value);
-            const float font_size = std::max(14.0f, 16.0f * uiScreenScale());
-            const Vector2 ts = MeasureTextEx(ui_font, dmg.c_str(), font_size, 1.0f);
-            const float rise_px = progress * 34.0f;
-            Color c{235, 48, 48, static_cast<unsigned char>(255.0f * t)};
-            drawUiText(ui_font, dmg, feet_x - ts.x * 0.5f, py - ts.y - 2.0f - rise_px, font_size, c);
-        }
-    };
-
     for (const auto& mv : monster_visuals) {
         const auto& m = *mv.msg;
         const float bar_y = mv.click_box.y + (tile_h * 0.5f) - 10.0f;
         drawHealthBar(mv.click_box.x, bar_y, mv.click_box.width, m.hp, m.max_hp);
-        drawCombatOutcomeFx("m:" + std::to_string(m.id),
+        drawCombatOutcomeFx(scene_state, "m:" + std::to_string(m.id),
                             mv.rx * tile_w + mv.click_box.width * 0.5f,
-                            mv.ry * tile_h + tile_h * 0.5f);
+                            mv.ry * tile_h + tile_h * 0.5f,
+                            combat_fx_tex, combat_fx_ready, ui_font, tile_w, tile_h);
         const float label_size = cfg.monster_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, m.name.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - (label_size + 3.0f), label_size, ORANGE);
@@ -546,7 +540,8 @@ void drawScene(const Room& room,
         const float y = pv.ry * tile_h + tile_h * 0.5f;
         Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 10.0f, tile_w, 5.0f};
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
-        drawCombatOutcomeFx("p:" + p.user, x, y);
+        drawCombatOutcomeFx(scene_state, "p:" + p.user, x, y,
+                            combat_fx_tex, combat_fx_ready, ui_font, tile_w, tile_h);
         const float label_size = cfg.player_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);

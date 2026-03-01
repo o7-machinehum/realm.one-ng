@@ -113,6 +113,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         result.state_changed = true;
         result.event_text = p.data.username + " hit " + mon.name + " for " + std::to_string(dmg);
 
+        // If the monster is dead
         if (mon.hp <= 0) {
             p.data.exp += mon.exp_reward;
             p.data.melee_xp += std::max(1, mon.exp_reward / 2);
