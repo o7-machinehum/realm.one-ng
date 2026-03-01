@@ -1,0 +1,27 @@
+{
+    "maps": [
+        {
+            "fileName": "rooms/0.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "fileName": "rooms/n1.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 0,
+            "y": 320
+        },
+        {
+            "fileName": "rooms/house.tmx",
+            "height": 320,
+            "width": 480,
+            "x": 0,
+            "y": -320
+        }
+    ],
+    "onlyShowAdjacentMaps": false,
+    "type": "world"
+}

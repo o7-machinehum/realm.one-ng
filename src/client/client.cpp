@@ -7,6 +7,7 @@
 #include "client_layout.h"
 #include "client_scene_renderer.h"
 #include "client_sheet_cache.h"
+#include "string_util.h"
 #include "ui_settings.h"
 #include "client_windows.h"
 #include "auth_ui.h"
@@ -465,7 +466,7 @@ int main(int argc, char** argv) {
                     tsx = def.sprite_tileset;
                     sprite_name = def.id;
                 } else {
-                    const std::string corpse_id = client::parseCorpseMonsterId(item_name);
+                    const std::string corpse_id = parseCorpseMonsterId(item_name);
                     if (corpse_id.empty()) return false;
                     auto mit = monster_defs_by_id.find(corpse_id);
                     if (mit == monster_defs_by_id.end()) return false;

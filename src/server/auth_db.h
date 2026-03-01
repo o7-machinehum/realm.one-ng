@@ -1,17 +1,19 @@
 #pragma once
 
+#include "tile_pos.h"
+
 #include <string>
 #include <vector>
 #include <unordered_map>
 
 struct sqlite3;
 
+// Data saved to/loaded from the database for each player between sessions.
 struct PersistedPlayer {
     std::string username;
-    std::string room;
+    std::string room;                // Qualified room name (e.g. "500_500:0.tmx").
     int exp = 0;
-    int x = 2;
-    int y = 2;
+    TilePos pos{2, 2};              // Tile position within the room.
     int melee_xp = 0;
     int distance_xp = 0;
     int magic_xp = 0;
@@ -21,19 +23,24 @@ struct PersistedPlayer {
     std::unordered_map<std::string, int> equipment_by_type; // equip_type -> inventory slot index
 };
 
+// SQLite-backed player authentication and persistence.
 class AuthDb {
 public:
+    // Opens (or creates) the SQLite database at db_path, applying schema migrations.
     explicit AuthDb(const std::string& db_path);
     ~AuthDb();
 
     AuthDb(const AuthDb&) = delete;
     AuthDb& operator=(const AuthDb&) = delete;
 
+    // Authenticates or creates a player account using Ed25519 public key.
+    // On success, fills out_player with persisted data and returns true.
     bool loginWithPublicKey(const std::string& username,
                             const std::string& public_key_hex,
                             bool create_account,
                             PersistedPlayer& out_player,
                             std::string& message);
+    // Writes the player's current state back to the database.
     bool savePlayer(const PersistedPlayer& player);
 
 private:

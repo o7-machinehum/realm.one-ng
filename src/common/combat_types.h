@@ -4,7 +4,8 @@
 // Outcome of a single combat exchange (attack roll).
 enum class CombatOutcome : int { None = 0, Hit = 1, Missed = 2, Blocked = 3 };
 
-// Cardinal facing direction for sprite rendering and movement.
+// Cardinal facing direction for game logic and network protocol.
+// See also Dir in sprites.h, which maps to sprite sheet row order.
 enum class Facing : int { North = 0, East = 1, South = 2, West = 3 };
 
 [[nodiscard]] constexpr int facingToInt(Facing f) { return static_cast<int>(f); }

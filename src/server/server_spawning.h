@@ -2,12 +2,13 @@
 #pragma once
 
 #include "server_state.h"
+#include "tile_pos.h"
 
 #include <string>
 
 // Spawns a single ground item by its definition ID at the given position.
 void spawnGroundItem(ServerState& state, const std::string& raw_item_id,
-                     const std::string& room_name, int x, int y);
+                     const std::string& room_name, TilePos pos);
 
 // Iterates all rooms in the world and creates initial monsters, NPCs, and items
 // from the spawn data authored in Tiled.

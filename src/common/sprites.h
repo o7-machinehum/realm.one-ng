@@ -6,9 +6,34 @@
 #include <utility>
 #include <vector>
 
+#include "combat_types.h"
 #include "raylib.h" // Rectangle
 
+// Cardinal direction for sprite sheet row selection (rendering order).
+// See also Facing in combat_types.h, which is for game logic / network protocol.
 enum class Dir : unsigned char { N, E, S, W };
+
+// Converts a Facing (game logic) to a Dir (sprite rendering).
+[[nodiscard]] constexpr Dir facingToDir(Facing f) {
+    switch (f) {
+        case Facing::North: return Dir::N;
+        case Facing::East:  return Dir::E;
+        case Facing::South: return Dir::S;
+        case Facing::West:  return Dir::W;
+    }
+    return Dir::S;
+}
+
+// Converts a Dir (sprite rendering) to a Facing (game logic).
+[[nodiscard]] constexpr Facing dirToFacing(Dir d) {
+    switch (d) {
+        case Dir::N: return Facing::North;
+        case Dir::E: return Facing::East;
+        case Dir::S: return Facing::South;
+        case Dir::W: return Facing::West;
+    }
+    return Facing::South;
+}
 enum class ClipKind : unsigned char { Move, Action, Death };
 
 class Frame {

@@ -315,11 +315,9 @@ std::vector<std::string> World::roomNames() const {
 }
 
 bool World::resolveEdgeTransition(const std::string& current_room,
-                                  int attempted_x,
-                                  int attempted_y,
+                                  TilePos attempted,
                                   std::string& out_room,
-                                  int& out_x,
-                                  int& out_y) const {
+                                  TilePos& out_pos) const {
     const std::string cur_key = resolveRoomName(current_room, current_room);
     const Room* cur_room = getRoom(cur_key);
     if (!cur_room) return false;
@@ -329,10 +327,9 @@ bool World::resolveEdgeTransition(const std::string& current_room,
 
     const Placement& cur = it_cur->second;
 
-    if (attempted_x >= 0 && attempted_x < cur.map_w && attempted_y >= 0 && attempted_y < cur.map_h) {
+    if (attempted.x >= 0 && attempted.x < cur.map_w && attempted.y >= 0 && attempted.y < cur.map_h) {
         out_room = cur_key;
-        out_x = attempted_x;
-        out_y = attempted_y;
+        out_pos = attempted;
         return true;
     }
 
@@ -343,13 +340,13 @@ bool World::resolveEdgeTransition(const std::string& current_room,
 
         int target_gx = gp_it->second.first;
         int target_gy = gp_it->second.second;
-        if (attempted_x < 0) {
+        if (attempted.x < 0) {
             target_gx -= 1;
-        } else if (attempted_x >= cur.map_w) {
+        } else if (attempted.x >= cur.map_w) {
             target_gx += 1;
-        } else if (attempted_y < 0) {
+        } else if (attempted.y < 0) {
             target_gy += 1;
-        } else if (attempted_y >= cur.map_h) {
+        } else if (attempted.y >= cur.map_h) {
             target_gy -= 1;
         }
 
@@ -363,18 +360,18 @@ bool World::resolveEdgeTransition(const std::string& current_room,
         const Placement& dst = pl_it->second;
 
         out_room = l0_it->second;
-        if (attempted_x < 0) {
-            out_x = std::max(0, dst.map_w - 1);
-            out_y = clampInt(attempted_y, 0, std::max(0, dst.map_h - 1));
-        } else if (attempted_x >= cur.map_w) {
-            out_x = 0;
-            out_y = clampInt(attempted_y, 0, std::max(0, dst.map_h - 1));
-        } else if (attempted_y < 0) {
-            out_x = clampInt(attempted_x, 0, std::max(0, dst.map_w - 1));
-            out_y = std::max(0, dst.map_h - 1);
+        if (attempted.x < 0) {
+            out_pos.x = std::max(0, dst.map_w - 1);
+            out_pos.y = clampInt(attempted.y, 0, std::max(0, dst.map_h - 1));
+        } else if (attempted.x >= cur.map_w) {
+            out_pos.x = 0;
+            out_pos.y = clampInt(attempted.y, 0, std::max(0, dst.map_h - 1));
+        } else if (attempted.y < 0) {
+            out_pos.x = clampInt(attempted.x, 0, std::max(0, dst.map_w - 1));
+            out_pos.y = std::max(0, dst.map_h - 1);
         } else {
-            out_x = clampInt(attempted_x, 0, std::max(0, dst.map_w - 1));
-            out_y = 0;
+            out_pos.x = clampInt(attempted.x, 0, std::max(0, dst.map_w - 1));
+            out_pos.y = 0;
         }
         return true;
     }

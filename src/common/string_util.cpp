@@ -19,3 +19,11 @@ std::string toLowerAscii(std::string s) {
 std::string normalizeId(std::string s) {
     return toLowerAscii(trimWhitespace(std::move(s)));
 }
+
+std::string parseCorpseMonsterId(const std::string& item_id) {
+    const std::string n = normalizeId(item_id);
+    constexpr const char* prefix = "corpse:";
+    const size_t plen = 7; // strlen("corpse:")
+    if (n.size() <= plen || n.rfind(prefix, 0) != 0) return {};
+    return n.substr(plen);
+}

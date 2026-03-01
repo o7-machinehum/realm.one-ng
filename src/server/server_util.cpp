@@ -47,13 +47,6 @@ std::string makeCorpseItemId(const std::string& monster_id) {
     return std::string(kCorpsePrefix) + normalizeId(monster_id);
 }
 
-std::string parseCorpseMonsterId(const std::string& item_id) {
-    const std::string n = normalizeId(item_id);
-    const std::string prefix = kCorpsePrefix;
-    if (n.rfind(prefix, 0) != 0) return {};
-    return n.substr(prefix.size());
-}
-
 // ---- Equipment ----
 
 std::vector<EquippedItemMsg> buildEquipmentMsgList(
@@ -259,8 +252,8 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
     GameStateMsg gs;
     gs.your_user = self.data.username;
     gs.your_room = self.data.room;
-    gs.your_x = self.data.x;
-    gs.your_y = self.data.y;
+    gs.your_x = self.data.pos.x;
+    gs.your_y = self.data.pos.y;
     gs.your_exp = self.data.exp;
     gs.your_hp = self.hp;
     gs.your_max_hp = self.max_hp;
@@ -325,8 +318,8 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
         PlayerStateMsg ps;
         ps.user     = p.data.username;
         ps.room     = p.data.room;
-        ps.x        = p.data.x;
-        ps.y        = p.data.y;
+        ps.x        = p.data.pos.x;
+        ps.y        = p.data.pos.y;
         ps.exp      = p.data.exp;
         ps.hp       = p.hp;
         ps.max_hp   = p.max_hp;
@@ -346,7 +339,7 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
         if (m.room != self.data.room) continue;
         gs.monsters.push_back(MonsterStateMsg{
             m.id, m.name, m.sprite_tileset, m.sprite_name,
-            m.size_w, m.size_h, m.room, m.x, m.y,
+            m.size_w, m.size_h, m.room, m.pos.x, m.pos.y,
             m.hp, m.max_hp,
             facingToInt(m.facing), m.attack_anim_seq,
             combatOutcomeToInt(m.combat_outcome), m.combat_outcome_seq, m.combat_value
@@ -358,7 +351,7 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
         if (n.room != self.data.room) continue;
         gs.npcs.push_back(NpcStateMsg{
             n.id, n.name, n.sprite_tileset, n.sprite_name,
-            n.size_w, n.size_h, n.room, n.x, n.y,
+            n.size_w, n.size_h, n.room, n.pos.x, n.pos.y,
             facingToInt(n.facing)
         });
     }
@@ -369,7 +362,7 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
         gs.items.push_back(GroundItemStateMsg{
             i.id, i.name, i.sprite_tileset, i.sprite_name,
             i.sprite_w_tiles, i.sprite_h_tiles, i.sprite_clip,
-            i.room, i.x, i.y
+            i.room, i.pos.x, i.pos.y
         });
     }
 

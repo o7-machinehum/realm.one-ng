@@ -8,6 +8,8 @@
 #include <functional>
 #include <cstdint>
 
+#include "tile_pos.h"
+
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/string.hpp>
 #include <cereal/types/vector.hpp>
@@ -43,51 +45,49 @@ struct PortalTrigger {
     float w = 0.0f;
     float h = 0.0f;
     std::string to_room;
-    int to_x = 0;
-    int to_y = 0;
+    TilePos to_pos;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(x, y, w, h, to_room, to_x, to_y);
+        ar(x, y, w, h, to_room, to_pos.x, to_pos.y);
     }
 };
 
 struct MonsterSpawn {
     std::string monster_id;
     std::string name_override;
-    int x = 0;
-    int y = 0;
+    TilePos pos;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(monster_id, name_override, x, y);
+        ar(monster_id, name_override, pos.x, pos.y);
     }
 };
 
 struct ItemSpawn {
     std::string item_id;
-    int x = 0;
-    int y = 0;
+    TilePos pos;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(item_id, x, y);
+        ar(item_id, pos.x, pos.y);
     }
 };
 
 struct NpcSpawn {
     std::string npc_id;
-    int x = 0;
-    int y = 0;
+    TilePos pos;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(npc_id, x, y);
+        ar(npc_id, pos.x, pos.y);
     }
 };
 
+// A single room (TMX map) with tile layers, portals, spawn data, and walkability.
 class Room {
 public:
+    // Parses a TMX file, loading tilesets, layers, portals, spawns, and walkability.
     bool loadFromFile(const std::filesystem::path& tmx_path);
 
     // ---- data access ----
@@ -103,6 +103,7 @@ public:
     const std::vector<ItemSpawn>& item_spawns() const { return item_spawns_; }
     const std::vector<NpcSpawn>& npc_spawns() const { return npc_spawns_; }
     const std::unordered_map<std::string, std::string>& properties() const { return props_; }
+    // Returns true if the tile at (x, y) is walkable (not blocked).
     bool isWalkable(int x, int y) const;
 
     std::string get_name() const {

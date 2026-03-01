@@ -1,5 +1,6 @@
 #include "server_msg_handlers.h"
 
+#include "server_constants.h"
 #include "server_occupancy.h"
 #include "server_spawning.h"
 #include "server_util.h"
@@ -11,11 +12,6 @@
 #include <iostream>
 
 namespace {
-
-constexpr int kMeleeRangeTiles  = 1;
-constexpr int kThrowRangeTiles  = 5;
-constexpr int kInventoryLimit   = 8;
-constexpr int kNpcTalkRangeTiles = 10;
 
 // ---- Individual handlers (file-internal) ----
 
@@ -49,8 +45,8 @@ void handleLoginMessage(ServerState& state, ENetPeer* peer, const Envelope& env)
             if (room) persisted.room = state.world->resolveRoomName(room->get_name(), {});
         }
         if (room) {
-            persisted.x = std::clamp(persisted.x, 0, room->map_width() - 1);
-            persisted.y = std::clamp(persisted.y, 0, room->map_height() - 1);
+            persisted.pos.x = std::clamp(persisted.pos.x, 0, room->map_width() - 1);
+            persisted.pos.y = std::clamp(persisted.pos.y, 0, room->map_height() - 1);
         }
 
         player.authenticated = true;
@@ -92,35 +88,32 @@ void handleMoveMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
     if (!room) room = state.world->defaultRoom();
     if (!room) return;
 
-    const int attempted_x = player.data.x + dx;
-    const int attempted_y = player.data.y + dy;
+    const TilePos attempted = player.data.pos.offset(dx, dy);
 
     std::string next_room = player.data.room;
-    int next_x = player.data.x;
-    int next_y = player.data.y;
+    TilePos next_pos = player.data.pos;
 
-    if (!state.world->resolveEdgeTransition(player.data.room, attempted_x, attempted_y,
-                                            next_room, next_x, next_y)) {
+    if (!state.world->resolveEdgeTransition(player.data.room, attempted,
+                                            next_room, next_pos)) {
         return;
     }
 
     const Room* next_room_ptr = state.world->getRoom(next_room);
-    if (!next_room_ptr || !next_room_ptr->isWalkable(next_x, next_y)) return;
-    if (isTileOccupiedByMonster(state, next_room, next_x, next_y) ||
-        isTileOccupiedByNpc(state, next_room, next_x, next_y) ||
-        isTileOccupiedByPlayer(state, peer, next_room, next_x, next_y)) {
+    if (!next_room_ptr || !next_room_ptr->isWalkable(next_pos.x, next_pos.y)) return;
+    if (isTileOccupiedByMonster(state, next_room, next_pos) ||
+        isTileOccupiedByNpc(state, next_room, next_pos) ||
+        isTileOccupiedByPlayer(state, peer, next_room, next_pos)) {
         return;
     }
 
     bool changed_room = (next_room != player.data.room);
     player.data.room = next_room;
-    player.data.x = next_x;
-    player.data.y = next_y;
+    player.data.pos = next_pos;
 
     // Portal trigger check (data-authored in Tiled)
     if (const Room* post_move_room = state.world->getRoom(player.data.room)) {
-        const float cx = player.data.x * post_move_room->tile_width() + (post_move_room->tile_width() * 0.5f);
-        const float cy = player.data.y * post_move_room->tile_height() + (post_move_room->tile_height() * 0.5f);
+        const float cx = player.data.pos.x * post_move_room->tile_width() + (post_move_room->tile_width() * 0.5f);
+        const float cy = player.data.pos.y * post_move_room->tile_height() + (post_move_room->tile_height() * 0.5f);
 
         for (const auto& portal : post_move_room->portals()) {
             const float px2 = portal.x + portal.w;
@@ -131,12 +124,11 @@ void handleMoveMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
             const Room* dst = state.world->getRoom(dst_room);
             if (!dst) break;
 
-            const int tx = std::clamp(portal.to_x, 0, dst->map_width() - 1);
-            const int ty = std::clamp(portal.to_y, 0, dst->map_height() - 1);
+            const int tx = std::clamp(portal.to_pos.x, 0, dst->map_width() - 1);
+            const int ty = std::clamp(portal.to_pos.y, 0, dst->map_height() - 1);
             if (dst->isWalkable(tx, ty)) {
                 player.data.room = dst_room;
-                player.data.x = tx;
-                player.data.y = ty;
+                player.data.pos = {tx, ty};
                 changed_room = true;
             }
             break;
@@ -174,7 +166,7 @@ void handleAttackMessage(ServerState& state, ENetPeer* peer, const Envelope& env
         for (const auto& mon : state.monsters) {
             if (mon.id != player.attack_target_monster_id) continue;
             if (mon.room != player.data.room) break;
-            player.facing = facingFromDelta(mon.x - player.data.x, mon.y - player.data.y, player.facing);
+            player.facing = facingFromDelta(mon.pos.x - player.data.pos.x, mon.pos.y - player.data.pos.y, player.facing);
             break;
         }
     }
@@ -228,31 +220,28 @@ void handleDropMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
         const Room* room = state.world->getRoom(player.data.room);
         if (!room) return;
 
-        int drop_x = player.data.x;
-        int drop_y = player.data.y;
+        TilePos drop_pos = player.data.pos;
         if (m.to_x >= 0 && m.to_y >= 0) {
-            drop_x = m.to_x;
-            drop_y = m.to_y;
+            drop_pos = {m.to_x, m.to_y};
         }
-        if (drop_x < 0 || drop_y < 0 ||
-            drop_x >= room->map_width() || drop_y >= room->map_height()) {
+        if (drop_pos.x < 0 || drop_pos.y < 0 ||
+            drop_pos.x >= room->map_width() || drop_pos.y >= room->map_height()) {
             return;
         }
-        if (!room->isWalkable(drop_x, drop_y)) return;
-        if (isTileOccupiedByMonster(state, player.data.room, drop_x, drop_y) ||
-            isTileOccupiedByNpc(state, player.data.room, drop_x, drop_y) ||
-            isTileOccupiedByPlayer(state, peer, player.data.room, drop_x, drop_y)) {
+        if (!room->isWalkable(drop_pos.x, drop_pos.y)) return;
+        if (isTileOccupiedByMonster(state, player.data.room, drop_pos) ||
+            isTileOccupiedByNpc(state, player.data.room, drop_pos) ||
+            isTileOccupiedByPlayer(state, peer, player.data.room, drop_pos)) {
             return;
         }
-        const int throw_dist = tileDistance(player.data.x, player.data.y, drop_x, drop_y);
+        const int throw_dist = tileDistance(player.data.pos, drop_pos);
         if (throw_dist > kThrowRangeTiles) return;
 
         const std::string inv_entry = player.data.inventory[m.inventory_index];
         GroundItemRuntime drop_item{};
         drop_item.id = state.next_item_id++;
         drop_item.room = player.data.room;
-        drop_item.x = drop_x;
-        drop_item.y = drop_y;
+        drop_item.pos = drop_pos;
 
         const std::string corpse_monster_id = parseCorpseMonsterId(inv_entry);
         bool can_drop = false;
@@ -355,11 +344,12 @@ void handleMoveGroundItemMessage(ServerState& state, ENetPeer* peer, const Envel
     const Room* room = state.world->getRoom(player.data.room);
     if (!room) return;
 
-    if (m.to_x < 0 || m.to_y < 0 || m.to_x >= room->map_width() || m.to_y >= room->map_height()) return;
-    if (!room->isWalkable(m.to_x, m.to_y)) return;
-    if (isTileOccupiedByMonster(state, player.data.room, m.to_x, m.to_y) ||
-        isTileOccupiedByNpc(state, player.data.room, m.to_x, m.to_y) ||
-        isTileOccupiedByPlayer(state, peer, player.data.room, m.to_x, m.to_y)) {
+    const TilePos target{m.to_x, m.to_y};
+    if (target.x < 0 || target.y < 0 || target.x >= room->map_width() || target.y >= room->map_height()) return;
+    if (!room->isWalkable(target.x, target.y)) return;
+    if (isTileOccupiedByMonster(state, player.data.room, target) ||
+        isTileOccupiedByNpc(state, player.data.room, target) ||
+        isTileOccupiedByPlayer(state, peer, player.data.room, target)) {
         return;
     }
 
@@ -367,11 +357,10 @@ void handleMoveGroundItemMessage(ServerState& state, ENetPeer* peer, const Envel
     if (idx < 0) return;
     if (!isItemReachableByPlayer(player, state.items[static_cast<size_t>(idx)])) return;
 
-    const int throw_dist = tileDistance(m.to_x, m.to_y, player.data.x, player.data.y);
+    const int throw_dist = tileDistance(target, player.data.pos);
     if (throw_dist > kThrowRangeTiles) return;
 
-    state.items[idx].x = m.to_x;
-    state.items[idx].y = m.to_y;
+    state.items[idx].pos = target;
     broadcastGameState(state, player.data.username + " moved " + state.items[idx].name);
 }
 
@@ -426,7 +415,7 @@ void handleChatMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
     for (size_t i = 0; i < state.npcs.size(); ++i) {
         const auto& npc = state.npcs[i];
         if (npc.room != player.data.room) continue;
-        const int dist = tileDistance(player.data.x, player.data.y, npc.x, npc.y);
+        const int dist = tileDistance(player.data.pos, npc.pos);
         if (dist > kNpcTalkRangeTiles) continue;
         std::string matched_reply;
         for (const auto& d : npc.dialogues) {
@@ -447,8 +436,8 @@ void handleChatMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
         best_idx = static_cast<int>(i);
         npc_reply = matched_reply;
         npc_name = npc.name;
-        speaker_dx = player.data.x - npc.x;
-        speaker_dy = player.data.y - npc.y;
+        speaker_dx = player.data.pos.x - npc.pos.x;
+        speaker_dy = player.data.pos.y - npc.pos.y;
     }
     if (best_idx >= 0 && !npc_reply.empty() && !npc_name.empty()) {
         state.npcs[static_cast<size_t>(best_idx)].facing = facingFromDelta(

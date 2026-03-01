@@ -1,5 +1,8 @@
 // Runtime state for a single item lying on the ground.
+// Runtime state for a single item lying on the ground.
 #pragma once
+
+#include "tile_pos.h"
 
 #include <string>
 
@@ -13,6 +16,5 @@ struct GroundItemRuntime {
     int sprite_h_tiles = 1;
     int sprite_clip = 0; // 0 = Move, 1 = Death
     std::string room;
-    int x = 0;
-    int y = 0;
+    TilePos pos;
 };

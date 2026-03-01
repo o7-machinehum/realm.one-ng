@@ -1,5 +1,6 @@
 #include "server_tick.h"
 
+#include "server_constants.h"
 #include "server_occupancy.h"
 #include "server_spawning.h"
 #include "server_util.h"
@@ -10,9 +11,6 @@
 #include <random>
 
 namespace {
-
-constexpr int kMeleeRangeTiles = 1;
-constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick
 
 std::mt19937& tickRng() {
     static std::mt19937 rng{std::random_device{}()};
@@ -28,12 +26,10 @@ bool tryMoveMonster(const ServerState& state, MonsterRuntime& mon,
                     const std::array<std::pair<int, int>, 4>& dirs) {
     for (const auto& [dx, dy] : dirs) {
         if (dx == 0 && dy == 0) continue;
-        const int nx = mon.x + dx;
-        const int ny = mon.y + dy;
-        if (!canMonsterOccupyTile(state, mon, nx, ny, mon.id)) continue;
+        const TilePos target = mon.pos.offset(dx, dy);
+        if (!canMonsterOccupyTile(state, mon, target, mon.id)) continue;
         mon.facing = facingFromDelta(dx, dy, mon.facing);
-        mon.x = nx;
-        mon.y = ny;
+        mon.pos = target;
         return true;
     }
     return false;
@@ -76,12 +72,12 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         auto& mon = state.monsters[hit_index];
         if (mon.room != p.data.room) continue;
 
-        const int dist = std::abs(mon.x - p.data.x) + std::abs(mon.y - p.data.y);
+        const int dist = mon.pos.distanceTo(p.data.pos);
         if (dist > kMeleeRangeTiles) continue;
 
-        p.facing = facingFromDelta(mon.x - p.data.x, mon.y - p.data.y, p.facing);
+        p.facing = facingFromDelta(mon.pos.x - p.data.pos.x, mon.pos.y - p.data.pos.y, p.facing);
         p.attack_anim_seq += 1;
-        mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
+        mon.facing = facingFromDelta(p.data.pos.x - mon.pos.x, p.data.pos.y - mon.pos.y, mon.facing);
         mon.attack_anim_seq += 1;
 
         const int melee_level = computeLevelFromXp(state.settings.progression, p.data.melee_xp).level;
@@ -133,15 +129,14 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
             corpse.sprite_h_tiles = std::max(1, mon.size_h);
             corpse.sprite_clip = 1;
             corpse.room = mon.room;
-            corpse.x = mon.x;
-            corpse.y = mon.y;
+            corpse.pos = mon.pos;
             state.items.push_back(std::move(corpse));
 
             // Roll loot drops
             for (const auto& drop : mon.drops) {
                 if (drop.item_id.empty()) continue;
                 if (!rollFloatChance(drop.chance)) continue;
-                spawnGroundItem(state, drop.item_id, mon.room, mon.x, mon.y);
+                spawnGroundItem(state, drop.item_id, mon.room, mon.pos);
             }
 
             state.pending_respawns.push_back(MonsterRespawnEntry{
@@ -174,9 +169,8 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }};
 
         bool moved = false;
-        int px = 0;
-        int py = 0;
-        if (findNearestPlayerToMonster(state, mon, px, py)) {
+        auto player_pos = findNearestPlayerToMonster(state, mon);
+        if (player_pos.has_value()) {
             std::array<std::pair<int, int>, 4> chase_dirs{};
             int idx = 0;
             auto push_unique = [&](int dx, int dy) {
@@ -188,8 +182,8 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
                 if (idx < 4) chase_dirs[static_cast<size_t>(idx++)] = {dx, dy};
             };
 
-            const int dx_to_player = px - mon.x;
-            const int dy_to_player = py - mon.y;
+            const int dx_to_player = player_pos->x - mon.pos.x;
+            const int dy_to_player = player_pos->y - mon.pos.y;
             const int sx = signum(dx_to_player);
             const int sy = signum(dy_to_player);
             if (std::abs(dx_to_player) >= std::abs(dy_to_player)) {
@@ -237,12 +231,10 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }};
         bool moved = false;
         for (const auto& [dx, dy] : random_dirs) {
-            const int nx = npc.x + dx;
-            const int ny = npc.y + dy;
-            if (!canNpcOccupyTile(state, npc, nx, ny, npc.id)) continue;
+            const TilePos target = npc.pos.offset(dx, dy);
+            if (!canNpcOccupyTile(state, npc, target, npc.id)) continue;
             npc.facing = facingFromDelta(dx, dy, npc.facing);
-            npc.x = nx;
-            npc.y = ny;
+            npc.pos = target;
             moved = true;
             break;
         }
@@ -261,7 +253,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         for (auto& [peer, p] : state.players) {
             if (!p.authenticated) continue;
             if (p.data.room != mon.room) continue;
-            const int dist = std::abs(mon.x - p.data.x) + std::abs(mon.y - p.data.y);
+            const int dist = mon.pos.distanceTo(p.data.pos);
             if (dist > kMeleeRangeTiles) continue;
             if (dist >= best_dist) continue;
             best_dist = dist;
@@ -272,7 +264,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         if (pit == state.players.end()) continue;
         auto& p = pit->second;
 
-        mon.facing = facingFromDelta(p.data.x - mon.x, p.data.y - mon.y, mon.facing);
+        mon.facing = facingFromDelta(p.data.pos.x - mon.pos.x, p.data.pos.y - mon.pos.y, mon.facing);
         mon.attack_anim_seq += 1;
 
         const int defence = computePlayerDefence(p, state);
@@ -319,11 +311,8 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
             p.attack_target_monster_id = -1;
             p.hp = p.max_hp;
             p.mana = p.max_mana;
-            int rx = 0;
-            int ry = 0;
-            if (findRespawnTile(state, p.data.room, rx, ry)) {
-                p.data.x = rx;
-                p.data.y = ry;
+            if (auto respawn = findRespawnTile(state, p.data.room)) {
+                p.data.pos = *respawn;
             }
             persistPlayer(p, *state.auth_db);
             result.event_text = p.data.username + " was defeated by " + mon.name;
@@ -340,26 +329,24 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }
 
         MonsterRuntime respawned = entry.mon;
-        const int rx = respawned.spawn_x;
-        const int ry = respawned.spawn_y;
+        const TilePos rpos = respawned.spawn_pos;
         const std::string room_name = respawned.room;
         const Room* room = state.world->getRoom(room_name);
         if (!room) {
             state.pending_respawns.erase(state.pending_respawns.begin() + static_cast<long>(i));
             continue;
         }
-        if (!room->isWalkable(rx, ry) ||
-            isTileOccupiedByMonster(state, room_name, rx, ry) ||
-            isTileOccupiedByNpc(state, room_name, rx, ry) ||
-            isTileOccupiedByPlayer(state, nullptr, room_name, rx, ry)) {
+        if (!room->isWalkable(rpos.x, rpos.y) ||
+            isTileOccupiedByMonster(state, room_name, rpos) ||
+            isTileOccupiedByNpc(state, room_name, rpos) ||
+            isTileOccupiedByPlayer(state, nullptr, room_name, rpos)) {
             entry.remaining_ms = 1000;
             ++i;
             continue;
         }
 
         respawned.id = state.next_monster_id++;
-        respawned.x = rx;
-        respawned.y = ry;
+        respawned.pos = rpos;
         respawned.hp = respawned.max_hp;
         respawned.facing = Facing::South;
         respawned.attack_anim_seq = 0;

@@ -9,8 +9,6 @@
 namespace client {
 namespace {
 
-constexpr const char* kCorpsePrefix = "corpse:";
-
 // Reads a TOML string literal or returns the raw token for bare values.
 std::string parseTomlString(const std::string& raw) {
     std::string v = trimWhitespace(raw);
@@ -55,14 +53,6 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
 // Normalizes ids from file/user data so lookups are case/space insensitive.
 std::string normalizeKey(std::string s) {
     return normalizeId(std::move(s));
-}
-
-// Extracts monster id from corpse inventory entries like "corpse:rat".
-std::string parseCorpseMonsterId(const std::string& raw) {
-    const std::string n = normalizeKey(raw);
-    const std::string prefix = kCorpsePrefix;
-    if (n.rfind(prefix, 0) != 0) return {};
-    return n.substr(prefix.size());
 }
 
 // Loads lightweight item UI metadata from item TOML definitions.

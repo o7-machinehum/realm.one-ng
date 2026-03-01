@@ -7,7 +7,7 @@
 #include <iostream>
 
 void spawnGroundItem(ServerState& state, const std::string& raw_item_id,
-                     const std::string& room_name, int x, int y) {
+                     const std::string& room_name, TilePos pos) {
     const std::string item_id = normalizeId(raw_item_id);
     auto dit = state.item_defs_by_id.find(item_id);
     if (dit == state.item_defs_by_id.end()) {
@@ -26,8 +26,7 @@ void spawnGroundItem(ServerState& state, const std::string& raw_item_id,
     item.sprite_h_tiles = 1;
     item.sprite_clip = 0;
     item.room = room_name;
-    item.x = x;
-    item.y = y;
+    item.pos = pos;
     state.items.push_back(std::move(item));
 }
 
@@ -47,20 +46,20 @@ void spawnInitialEntities(ServerState& state) {
             const MonsterDef& def = *dit->second;
             const int sw = std::max(1, def.monster_size_w);
             const int sh = std::max(1, def.monster_size_h);
-            if (!room->isWalkable(spawn.x, spawn.y)) {
+            if (!room->isWalkable(spawn.pos.x, spawn.pos.y)) {
                 std::cerr << "[server] monster spawn '" << spawn.monster_id
                           << "' overlaps blocked anchor tile in room "
-                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                          << room_name << " at (" << spawn.pos.x << "," << spawn.pos.y << ")\n";
                 continue;
             }
             bool overlap = false;
             for (const auto& m : state.monsters) {
                 if (m.room != room_name || m.hp <= 0) continue;
-                if (m.x == spawn.x && m.y == spawn.y) { overlap = true; break; }
+                if (m.pos == spawn.pos) { overlap = true; break; }
             }
             if (overlap) {
                 std::cerr << "[server] overlapping monster spawn in room "
-                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                          << room_name << " at (" << spawn.pos.x << "," << spawn.pos.y << ")\n";
                 continue;
             }
 
@@ -71,10 +70,8 @@ void spawnInitialEntities(ServerState& state) {
             mon.sprite_tileset = def.sprite_tileset;
             mon.sprite_name = def.id;
             mon.room = room_name;
-            mon.x = spawn.x;
-            mon.y = spawn.y;
-            mon.spawn_x = spawn.x;
-            mon.spawn_y = spawn.y;
+            mon.pos = spawn.pos;
+            mon.spawn_pos = spawn.pos;
             mon.size_w = sw;
             mon.size_h = sh;
             mon.hp = def.max_hp;
@@ -97,13 +94,13 @@ void spawnInitialEntities(ServerState& state) {
 
         // ---- Spawn ground items ----
         for (const auto& spawn : room->item_spawns()) {
-            if (!room->isWalkable(spawn.x, spawn.y)) {
+            if (!room->isWalkable(spawn.pos.x, spawn.pos.y)) {
                 std::cerr << "[server] item spawn '" << spawn.item_id
                           << "' overlaps blocked tile in room "
-                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                          << room_name << " at (" << spawn.pos.x << "," << spawn.pos.y << ")\n";
                 continue;
             }
-            spawnGroundItem(state, spawn.item_id, room_name, spawn.x, spawn.y);
+            spawnGroundItem(state, spawn.item_id, room_name, spawn.pos);
         }
 
         // ---- Spawn NPCs ----
@@ -115,26 +112,26 @@ void spawnInitialEntities(ServerState& state) {
                 continue;
             }
             const NpcDef& def = *dit->second;
-            if (!room->isWalkable(spawn.x, spawn.y)) {
+            if (!room->isWalkable(spawn.pos.x, spawn.pos.y)) {
                 std::cerr << "[server] npc spawn '" << spawn.npc_id
                           << "' overlaps blocked anchor tile in room "
-                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                          << room_name << " at (" << spawn.pos.x << "," << spawn.pos.y << ")\n";
                 continue;
             }
             bool overlap = false;
             for (const auto& m : state.monsters) {
                 if (m.room != room_name || m.hp <= 0) continue;
-                if (m.x == spawn.x && m.y == spawn.y) { overlap = true; break; }
+                if (m.pos == spawn.pos) { overlap = true; break; }
             }
             if (!overlap) {
                 for (const auto& n : state.npcs) {
                     if (n.room != room_name) continue;
-                    if (n.x == spawn.x && n.y == spawn.y) { overlap = true; break; }
+                    if (n.pos == spawn.pos) { overlap = true; break; }
                 }
             }
             if (overlap) {
                 std::cerr << "[server] overlapping npc spawn in room "
-                          << room_name << " at (" << spawn.x << "," << spawn.y << ")\n";
+                          << room_name << " at (" << spawn.pos.x << "," << spawn.pos.y << ")\n";
                 continue;
             }
 
@@ -145,10 +142,8 @@ void spawnInitialEntities(ServerState& state) {
             npc.sprite_tileset = def.sprite_tileset;
             npc.sprite_name = def.id;
             npc.room = room_name;
-            npc.x = spawn.x;
-            npc.y = spawn.y;
-            npc.home_x = spawn.x;
-            npc.home_y = spawn.y;
+            npc.pos = spawn.pos;
+            npc.home_pos = spawn.pos;
             npc.size_w = std::max(1, def.npc_size_w);
             npc.size_h = std::max(1, def.npc_size_h);
             npc.facing = Facing::South;

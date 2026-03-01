@@ -354,10 +354,10 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                     } else if (key == "to_world" || key == "world") {
                         to_world = read_str(prop);
                     } else if (key == "to_x" || key == "x") {
-                        p.to_x = read_int(prop, p.to_x);
+                        p.to_pos.x = read_int(prop, p.to_pos.x);
                         has_to_x = true;
                     } else if (key == "to_y" || key == "y") {
-                        p.to_y = read_int(prop, p.to_y);
+                        p.to_pos.y = read_int(prop, p.to_pos.y);
                         has_to_y = true;
                     }
 
@@ -376,10 +376,10 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                         } else if (nkey == "to_world" || nkey == "world") {
                             to_world = read_str(np);
                         } else if (nkey == "to_x" || nkey == "x") {
-                            p.to_x = read_int(np, p.to_x);
+                            p.to_pos.x = read_int(np, p.to_pos.x);
                             has_to_x = true;
                         } else if (nkey == "to_y" || nkey == "y") {
-                            p.to_y = read_int(np, p.to_y);
+                            p.to_pos.y = read_int(np, p.to_pos.y);
                             has_to_y = true;
                         }
                     }
@@ -402,13 +402,13 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
             if (!has_to_x) {
                 auto it = props_.find("to.x");
                 if (it != props_.end()) {
-                    try { p.to_x = std::stoi(it->second); } catch (...) {}
+                    try { p.to_pos.x = std::stoi(it->second); } catch (...) {}
                 }
             }
             if (!has_to_y) {
                 auto it = props_.find("to.y");
                 if (it != props_.end()) {
-                    try { p.to_y = std::stoi(it->second); } catch (...) {}
+                    try { p.to_pos.y = std::stoi(it->second); } catch (...) {}
                 }
             }
 
@@ -443,7 +443,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                 const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
                 auto it = ts_monster_props[tsi].find(local);
                 if (it == ts_monster_props[tsi].end() || it->second.empty()) continue;
-                monster_spawns_.push_back(MonsterSpawn{it->second, "", x, y});
+                monster_spawns_.push_back(MonsterSpawn{it->second, "", {x, y}});
             }
         }
         break;
@@ -462,7 +462,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                 const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
                 auto it = ts_item_props[tsi].find(local);
                 if (it == ts_item_props[tsi].end() || it->second.empty()) continue;
-                item_spawns_.push_back(ItemSpawn{it->second, x, y});
+                item_spawns_.push_back(ItemSpawn{it->second, {x, y}});
             }
         }
         break;
@@ -481,7 +481,7 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
                 const int local = static_cast<int>(gid) - tilesets_[tsi].first_gid;
                 auto it = ts_npc_props[tsi].find(local);
                 if (it == ts_npc_props[tsi].end() || it->second.empty()) continue;
-                npc_spawns_.push_back(NpcSpawn{it->second, x, y});
+                npc_spawns_.push_back(NpcSpawn{it->second, {x, y}});
             }
         }
         break;

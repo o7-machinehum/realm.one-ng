@@ -12,3 +12,7 @@
 
 // Trims then lowercases -- the canonical normalization for entity ID lookups.
 [[nodiscard]] std::string normalizeId(std::string s);
+
+// Extracts the monster definition ID from a corpse item ID (e.g. "corpse:rat" -> "rat").
+// Returns an empty string if the item is not a corpse.
+[[nodiscard]] std::string parseCorpseMonsterId(const std::string& item_id);

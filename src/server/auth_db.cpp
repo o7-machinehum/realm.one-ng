@@ -178,8 +178,8 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
         const char* db_pub = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 0));
         const char* db_room = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 1));
         out_player.exp = sqlite3_column_int(select_stmt, 2);
-        out_player.x = sqlite3_column_int(select_stmt, 3);
-        out_player.y = sqlite3_column_int(select_stmt, 4);
+        out_player.pos.x = sqlite3_column_int(select_stmt, 3);
+        out_player.pos.y = sqlite3_column_int(select_stmt, 4);
         const char* inv = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 5));
         const char* eqp = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 6));
         const char* sks = reinterpret_cast<const char*>(sqlite3_column_text(select_stmt, 7));
@@ -231,8 +231,7 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
 
     out_player.room = "500_500:0.tmx";
     out_player.exp = 0;
-    out_player.x = 16;
-    out_player.y = 10;
+    out_player.pos = {16, 10};
     out_player.melee_xp = 0;
     out_player.distance_xp = 0;
     out_player.magic_xp = 0;
@@ -255,8 +254,8 @@ bool AuthDb::loginWithPublicKey(const std::string& username,
     sqlite3_bind_text(insert_stmt, 2, public_key_hex.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(insert_stmt, 3, out_player.room.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(insert_stmt, 4, out_player.exp);
-    sqlite3_bind_int(insert_stmt, 5, out_player.x);
-    sqlite3_bind_int(insert_stmt, 6, out_player.y);
+    sqlite3_bind_int(insert_stmt, 5, out_player.pos.x);
+    sqlite3_bind_int(insert_stmt, 6, out_player.pos.y);
     sqlite3_bind_text(insert_stmt, 7, inv.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(insert_stmt, 8, sks.c_str(), -1, SQLITE_TRANSIENT);
 
@@ -286,8 +285,8 @@ bool AuthDb::savePlayer(const PersistedPlayer& player) {
     const std::string sks = joinSkills(player);
     sqlite3_bind_text(stmt, 1, player.room.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 2, player.exp);
-    sqlite3_bind_int(stmt, 3, player.x);
-    sqlite3_bind_int(stmt, 4, player.y);
+    sqlite3_bind_int(stmt, 3, player.pos.x);
+    sqlite3_bind_int(stmt, 4, player.pos.y);
     sqlite3_bind_text(stmt, 5, inv.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 6, eqp.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 7, sks.c_str(), -1, SQLITE_TRANSIENT);

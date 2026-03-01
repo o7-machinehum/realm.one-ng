@@ -3,6 +3,7 @@
 
 #include "combat_types.h"
 #include "monster_defs.h"
+#include "tile_pos.h"
 
 #include <cstdint>
 #include <string>
@@ -19,17 +20,15 @@ struct MonsterRuntime {
     std::string sprite_name;
 
     // ---- Position ----
-    std::string room;
-    int x = 0;
-    int y = 0;
-    int spawn_x = 0;
-    int spawn_y = 0;
-    int size_w = 1;
-    int size_h = 1;
+    std::string room;          // Qualified room name this monster is in.
+    TilePos pos;               // Current tile position.
+    TilePos spawn_pos;         // Original spawn position (used for respawning).
+    int size_w = 1;            // Sprite width in tiles.
+    int size_h = 1;            // Sprite height in tiles.
 
     // ---- Combat ----
-    int hp = 30;
-    int max_hp = 30;
+    int hp = 30;               // Current hit points.
+    int max_hp = 30;           // Maximum hit points.
     int strength = 6;
     int defense = 2;
     int evasion = 2;

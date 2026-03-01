@@ -27,8 +27,6 @@ struct ItemUiDef {
 
 // Produces a lowercase, trimmed key for id lookups.
 std::string normalizeKey(std::string s);
-// Returns corpse payload id from strings like "corpse:<monster_id>".
-std::string parseCorpseMonsterId(const std::string& raw);
 
 // Parses item UI metadata from TOML files in `dir_path`.
 std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path);
