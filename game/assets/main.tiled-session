@@ -93,11 +93,11 @@
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 5.5,
+            "scale": 1.5,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 255.90909090909093,
-                "y": 9.09090909090908
+                "x": 461.3333333333333,
+                "y": -144
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
@@ -131,19 +131,27 @@
             }
         },
         "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx": {
-            "scale": 5.5,
-            "selectedLayer": 0,
+            "scale": 1.5,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 262.0909090909091,
-                "y": 319.0909090909091
+                "x": 636,
+                "y": 119.33333333333331
             }
         },
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx": {
-            "scale": 2,
-            "selectedLayer": 0,
+            "scale": 3,
+            "selectedLayer": 1,
             "viewCenter": {
-                "x": 279.25,
-                "y": 323.5
+                "x": -240.33333333333331,
+                "y": -121
+            }
+        },
+        "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx": {
+            "scale": 1.5,
+            "selectedLayer": 1,
+            "viewCenter": {
+                "x": -84.66666666666669,
+                "y": 350.6666666666667
             }
         },
         "/home/machinehum/the_island/data/worlds/game/assets/art/cave.tsx": {
@@ -262,18 +270,18 @@
     "project": "main.tiled-project",
     "property.type": "portal",
     "recentFiles": [
+        "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
+        "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
+        "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx",
+        "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx",
         "art/npc_test.tsx",
         "art/tiny16.tsx",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
         "art/slime.tsx",
         "art/cave.tsx",
-        "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx",
-        "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx",
         "art/overworld.tsx",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx",
-        "art/properties.tsx"
+        "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {

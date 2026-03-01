@@ -21,6 +21,13 @@
             "y": -320,
             "width": 480,
             "height": 320
+        },
+        {
+            "fileName": "501_501/rooms/0.tmx",
+            "x": 480,
+            "y": -320,
+            "width": 480,
+            "height": 320
         }
     ]
 }
