@@ -107,6 +107,14 @@ int main(int argc, char** argv) {
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
+
+    // Room transition pan state
+    std::optional<Room> prev_room;
+    RoomRenderer prev_rr;
+    float transition_timer = 0.0f;
+    constexpr float transition_duration = 0.35f;
+    int transition_dir_x = 0;
+    int transition_dir_y = 0;
     std::string last_game_state_room;
     std::deque<std::string> logs;
     std::string input;
@@ -263,6 +271,31 @@ int main(int argc, char** argv) {
         }
 
         if (auto room = mailbox.pop<Room>(MsgType::Room)) {
+            // Detect pan direction from player's edge position in old room
+            transition_dir_x = 0;
+            transition_dir_y = 0;
+            if (current_room && game_state) {
+                const int px = game_state->your_x;
+                const int py = game_state->your_y;
+                const int mw = current_room->map_width();
+                const int mh = current_room->map_height();
+                if (px <= 0)      transition_dir_x = -1;
+                if (px >= mw - 1) transition_dir_x =  1;
+                if (py <= 0)      transition_dir_y = -1;
+                if (py >= mh - 1) transition_dir_y =  1;
+            }
+
+            const bool do_pan = (transition_dir_x != 0 || transition_dir_y != 0);
+            if (do_pan && current_room) {
+                prev_room = std::move(current_room);
+                prev_rr = std::move(rr);
+                transition_timer = transition_duration;
+            } else {
+                prev_room.reset();
+                prev_rr.unload();
+                transition_timer = 0.0f;
+            }
+
             current_room = std::move(*room);
             rr.load(*current_room);
             scene_state.prev_pos_by_key.clear();
@@ -303,6 +336,15 @@ int main(int argc, char** argv) {
             client::updateItemSheetCacheFromInventory(*game_state, item_defs_by_key, monster_defs_by_id, item_sheet_cache);
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
                 last_event = game_state->event_text;
+            }
+        }
+
+        // Tick room transition timer
+        if (transition_timer > 0.0f) {
+            transition_timer = std::max(0.0f, transition_timer - GetFrameTime());
+            if (transition_timer <= 0.0f) {
+                prev_room.reset();
+                prev_rr.unload();
             }
         }
 
@@ -351,19 +393,42 @@ int main(int argc, char** argv) {
         const float map_origin_x = play_layout.map_origin_x;
         const float map_origin_y = play_layout.map_origin_y;
 
+        // Compute transition offsets (zero when no transition active)
+        const bool transitioning = (transition_timer > 0.0f && prev_room);
+        float new_off_x = 0.0f, new_off_y = 0.0f;
+        float old_off_x = 0.0f, old_off_y = 0.0f;
+        if (transitioning) {
+            const float progress = 1.0f - (transition_timer / transition_duration);
+            old_off_x = -progress * play_w * transition_dir_x;
+            old_off_y = -progress * play_h * transition_dir_y;
+            new_off_x = (1.0f - progress) * play_w * transition_dir_x;
+            new_off_y = (1.0f - progress) * play_h * transition_dir_y;
+        }
+
         // World pass: background layers, entities, then foreground layers.
         // Scissor guarantees world drawing never bleeds outside play viewport.
         BeginScissorMode(play_x, play_y, play_w, play_h);
+
+        // Draw old room (tiles only, frozen snapshot) sliding out
+        if (transitioning) {
+            prev_rr.drawUnderEntities(*prev_room, render_scale,
+                Vector2{map_origin_x + old_off_x, map_origin_y + old_off_y});
+            prev_rr.drawAboveEntities(*prev_room, render_scale,
+                Vector2{map_origin_x + old_off_x, map_origin_y + old_off_y});
+        }
+
+        // Draw new room (tiles + entities) sliding in
         if (current_room) {
-            rr.drawUnderEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
+            rr.drawUnderEntities(*current_room, render_scale,
+                Vector2{map_origin_x + new_off_x, map_origin_y + new_off_y});
         }
 
         if (current_room && game_state) {
             client::SceneOutput scene_out{};
             client::SceneConfig draw_cfg = scene_cfg;
             draw_cfg.map_scale = render_scale;
-            draw_cfg.map_origin_x = map_origin_x;
-            draw_cfg.map_origin_y = map_origin_y;
+            draw_cfg.map_origin_x = map_origin_x + new_off_x;
+            draw_cfg.map_origin_y = map_origin_y + new_off_y;
             draw_cfg.map_view_width = map_draw_w;
             draw_cfg.map_view_height = map_draw_h;
             draw_cfg.inventory_panel_width = inventory_cfg.panel_w;
@@ -419,15 +484,16 @@ int main(int argc, char** argv) {
 
         }
         if (current_room) {
-            rr.drawAboveEntities(*current_room, render_scale, Vector2{map_origin_x, map_origin_y});
+            rr.drawAboveEntities(*current_room, render_scale,
+                Vector2{map_origin_x + new_off_x, map_origin_y + new_off_y});
         }
         EndScissorMode();
 
         if (current_room && game_state) {
             client::SceneConfig bubble_cfg = scene_cfg;
             bubble_cfg.map_scale = render_scale;
-            bubble_cfg.map_origin_x = map_origin_x;
-            bubble_cfg.map_origin_y = map_origin_y;
+            bubble_cfg.map_origin_x = map_origin_x + new_off_x;
+            bubble_cfg.map_origin_y = map_origin_y + new_off_y;
             bubble_cfg.map_view_width = map_draw_w;
             bubble_cfg.map_view_height = map_draw_h;
             client::drawSpeechOverlays(*current_room,
@@ -591,14 +657,16 @@ int main(int argc, char** argv) {
                 if (current_room) {
                     // Convert drop target from screen-space mouse to map tile-space.
                     const Vector2 m = GetMousePosition();
-                    if (m.x >= map_origin_x && m.y >= map_origin_y &&
-                        m.x < (map_origin_x + map_draw_w) &&
-                        m.y < (map_origin_y + map_draw_h)) {
+                    const float eff_ox = map_origin_x + new_off_x;
+                    const float eff_oy = map_origin_y + new_off_y;
+                    if (m.x >= eff_ox && m.y >= eff_oy &&
+                        m.x < (eff_ox + map_draw_w) &&
+                        m.y < (eff_oy + map_draw_h)) {
                         const float tile_w = current_room->tile_width() * render_scale;
                         const float tile_h = current_room->tile_height() * render_scale;
                         if (tile_w > 0.0f && tile_h > 0.0f) {
-                            drop.to_x = static_cast<int>(std::floor((m.x - map_origin_x) / tile_w));
-                            drop.to_y = static_cast<int>(std::floor((m.y - map_origin_y) / tile_h));
+                            drop.to_x = static_cast<int>(std::floor((m.x - eff_ox) / tile_w));
+                            drop.to_y = static_cast<int>(std::floor((m.y - eff_oy) / tile_h));
                         }
                     }
                 }

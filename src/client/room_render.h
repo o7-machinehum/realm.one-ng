@@ -21,6 +21,12 @@ public:
     RoomRenderer(const RoomRenderer&) = delete;
     RoomRenderer& operator=(const RoomRenderer&) = delete;
 
+    RoomRenderer(RoomRenderer&& o) noexcept : sets_(std::move(o.sets_)) { o.sets_.clear(); }
+    RoomRenderer& operator=(RoomRenderer&& o) noexcept {
+        if (this != &o) { unload(); sets_ = std::move(o.sets_); o.sets_.clear(); }
+        return *this;
+    }
+
     bool load(const Room& room);     // load textures/tsx metadata for room tilesets
     void unload();
 
