@@ -17,10 +17,6 @@ class World {
     struct Placement {
         std::string world_name;
         std::string room_name;
-        int world_x = 0;
-        int world_y = 0;
-        int pixel_w = 0;
-        int pixel_h = 0;
         int tile_w = 16;
         int tile_h = 16;
         int map_w = 0;

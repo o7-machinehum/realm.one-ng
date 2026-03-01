@@ -128,15 +128,10 @@ void World::loadDirectory(const std::string& world_dir) {
         Placement pl;
         pl.world_name = inferred_world_name;
         pl.room_name = inferred_world_name + ":" + room->get_name();
-        pl.world_x = 0;
-        pl.world_y = 0;
         pl.tile_w = room->tile_width();
         pl.tile_h = room->tile_height();
         pl.map_w = room->map_width();
         pl.map_h = room->map_height();
-        pl.pixel_w = pl.map_w * pl.tile_w;
-        pl.pixel_h = pl.map_h * pl.tile_h;
-
         addAlias(first_room_alias_, room->get_name(), pl.room_name);
         _world[pl.room_name] = std::move(room);
         placements_[pl.room_name] = std::move(pl);
@@ -209,17 +204,10 @@ void World::loadWorldFile(const std::string& world_file, const std::string& worl
         Placement pl;
         pl.world_name = effective_world_name;
         pl.room_name = qualified_name;
-        pl.world_x = findIntField(obj, "x", 0);
-        pl.world_y = findIntField(obj, "y", 0);
-        pl.pixel_w = findIntField(obj, "width", 0);
-        pl.pixel_h = findIntField(obj, "height", 0);
         pl.tile_w = room->tile_width();
         pl.tile_h = room->tile_height();
         pl.map_w = room->map_width();
         pl.map_h = room->map_height();
-
-        if (pl.pixel_w <= 0) pl.pixel_w = pl.map_w * pl.tile_w;
-        if (pl.pixel_h <= 0) pl.pixel_h = pl.map_h * pl.tile_h;
 
         addAlias(first_room_alias_, base_name, qualified_name);
         addAlias(first_room_alias_, effective_world_name + ":" + base_name, qualified_name);
@@ -388,30 +376,6 @@ bool World::resolveEdgeTransition(const std::string& current_room,
             out_x = clampInt(attempted_x, 0, std::max(0, dst.map_w - 1));
             out_y = 0;
         }
-        return true;
-    }
-
-    // Legacy fallback for non grid-positioned worlds only.
-    const int world_px = cur.world_x + attempted_x * cur.tile_w;
-    const int world_py = cur.world_y + attempted_y * cur.tile_h;
-
-    for (const auto& [name, pl] : placements_) {
-        if (pl.world_name != cur.world_name) continue;
-        if (pl.pixel_w <= 0 || pl.pixel_h <= 0) continue;
-
-        const bool inside_x = (world_px >= pl.world_x) && (world_px < pl.world_x + pl.pixel_w);
-        const bool inside_y = (world_py >= pl.world_y) && (world_py < pl.world_y + pl.pixel_h);
-        if (!inside_x || !inside_y) continue;
-
-        int tx = (world_px - pl.world_x) / std::max(1, pl.tile_w);
-        int ty = (world_py - pl.world_y) / std::max(1, pl.tile_h);
-
-        tx = clampInt(tx, 0, std::max(0, pl.map_w - 1));
-        ty = clampInt(ty, 0, std::max(0, pl.map_h - 1));
-
-        out_room = name;
-        out_x = tx;
-        out_y = ty;
         return true;
     }
 
