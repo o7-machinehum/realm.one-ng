@@ -117,6 +117,8 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         if (mon.hp <= 0) {
             p.data.exp += mon.exp_reward;
             p.data.melee_xp += std::max(1, mon.exp_reward / 2);
+            p.xp_gain_amount = mon.exp_reward;
+            p.xp_gain_seq += 1;
             p.attack_target_monster_id = -1;
 
             // Drop corpse item

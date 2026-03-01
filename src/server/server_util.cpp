@@ -307,6 +307,8 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
 
     gs.your_equipment = buildEquipmentMsgList(self.data.equipment_by_type, self.data.inventory);
     gs.attack_target_monster_id = self.attack_target_monster_id;
+    gs.xp_gain_seq = self.xp_gain_seq;
+    gs.xp_gain_amount = self.xp_gain_amount;
     gs.inventory = self.data.inventory;
     gs.event_text = event_text;
 

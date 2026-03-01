@@ -57,6 +57,8 @@ void handleLoginMessage(ServerState& state, ENetPeer* peer, const Envelope& env)
         player.mana = player.max_mana;
         player.combat_outcome = CombatOutcome::None;
         player.combat_outcome_seq = 0;
+        player.xp_gain_seq = 0;
+        player.xp_gain_amount = 0;
         player.attack_target_monster_id = -1;
 
         std::cout << "[server] LOGIN user=" << player.data.username

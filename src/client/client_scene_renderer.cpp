@@ -223,6 +223,16 @@ void drawScene(const Room& room,
     out.pickup_ground_item.reset();
     scene_state.attack_fx_t += dt;
 
+    // Track XP gain events
+    constexpr float kXpFxDurationSec = 1.2f;
+    if (game_state.xp_gain_seq != scene_state.last_xp_gain_seq) {
+        scene_state.last_xp_gain_seq = game_state.xp_gain_seq;
+        scene_state.xp_gain_amount = game_state.xp_gain_amount;
+        scene_state.xp_gain_timer = (game_state.xp_gain_amount > 0) ? kXpFxDurationSec : 0.0f;
+    } else {
+        scene_state.xp_gain_timer = std::max(0.0f, scene_state.xp_gain_timer - dt);
+    }
+
     // Compute
     const float tile_w = room.tile_width() * cfg.map_scale;
     const float tile_h = room.tile_height() * cfg.map_scale;
@@ -542,6 +552,14 @@ void drawScene(const Room& room,
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
         drawCombatOutcomeFx(scene_state, "p:" + p.user, x, y,
                             combat_fx_tex, combat_fx_ready, ui_font, tile_w, tile_h);
+
+        // Floating "+N exp" text when your player gains XP
+        if (p.user == game_state.your_user && scene_state.xp_gain_timer > 0.0f) {
+            const float progress = 1.0f - std::clamp(scene_state.xp_gain_timer / kXpFxDurationSec, 0.0f, 1.0f);
+            drawFloatingText(ui_font, "+" + std::to_string(scene_state.xp_gain_amount) + " exp",
+                             x, y - tile_h * 1.2f, Color{255, 255, 255, 255}, progress, 40.0f);
+        }
+
         const float label_size = cfg.player_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, p.user.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, p.user, x - (name_w * 0.5f), player_bar.y - (label_size + 1.0f), label_size, RAYWHITE);

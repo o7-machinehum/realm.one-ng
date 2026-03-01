@@ -33,6 +33,11 @@ struct SceneState {
     uint64_t speech_seq_counter = 0;
     int dragging_ground_item_id = -1;
     float attack_fx_t = 0.0f;
+
+    // XP gain floating text
+    uint32_t last_xp_gain_seq = 0;
+    int xp_gain_amount = 0;
+    float xp_gain_timer = 0.0f;
 };
 
 struct SceneConfig {

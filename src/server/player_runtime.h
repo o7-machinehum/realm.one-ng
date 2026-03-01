@@ -29,4 +29,8 @@ struct PlayerRuntime {
     uint32_t combat_outcome_seq = 0; // Incremented on each combat outcome.
     int combat_value = 0;            // Damage dealt in last hit outcome.
     int attack_target_monster_id = -1; // Monster being auto-attacked, or -1.
+
+    // ---- XP gain notification ----
+    uint32_t xp_gain_seq = 0;           // Incremented on each XP award.
+    int xp_gain_amount = 0;             // Amount gained in last award.
 };

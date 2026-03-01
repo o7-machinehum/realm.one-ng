@@ -152,6 +152,8 @@ struct GameStateMsg {
     int trait_armor = 0;
     std::vector<EquippedItemMsg> your_equipment;
     int attack_target_monster_id = -1;
+    uint32_t xp_gain_seq = 0;
+    int xp_gain_amount = 0;
     std::vector<std::string> inventory;
     std::vector<PlayerStateMsg> players;
     std::vector<MonsterStateMsg> monsters;
@@ -170,6 +172,6 @@ struct GameStateMsg {
            skill_evasion_level, skill_evasion_xp, skill_evasion_xp_to_next,
            derived_defence, derived_offence, derived_evasion,
            trait_attack, trait_shielding, trait_evasion, trait_armor,
-           your_equipment, attack_target_monster_id, inventory, players, monsters, npcs, items, event_text);
+           your_equipment, attack_target_monster_id, xp_gain_seq, xp_gain_amount, inventory, players, monsters, npcs, items, event_text);
     }
 };
