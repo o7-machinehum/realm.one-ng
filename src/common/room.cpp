@@ -288,10 +288,8 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
 
         L.width = 0;
         L.height = 0;
-        L.opacity = 1.0f;
         layer->QueryIntAttribute("width", &L.width);
         layer->QueryIntAttribute("height", &L.height);
-        layer->QueryFloatAttribute("opacity", &L.opacity);
         if (L.width <= 0 || L.height <= 0) return false;
 
         XMLElement* data = layer->FirstChildElement("data");
