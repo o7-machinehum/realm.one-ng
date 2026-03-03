@@ -14,7 +14,6 @@ namespace client {
 struct SpriteSheetCacheEntry {
     Sprites sprites;
     Texture2D tex{};
-    bool ready = false;
     Sprites::SizeOverrideMap size_overrides;
 };
 

@@ -139,38 +139,9 @@ void drawActor(const Sprites& sprites,
     DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, tint);
 }
 
-Font loadUIFont(bool& owns_font) {
-    const char* ttf_candidates[] = {
-        "game/assets/fonts/AtkinsonHyperlegible-Regular.ttf",
-        "game/assets/fonts/AtkinsonHyperlegible-Bold.ttf",
-    };
-
-    for (const char* path : ttf_candidates) {
-        if (!FileExists(path)) continue;
-        Font f = LoadFontEx(path, 40, nullptr, 0);
-        if (f.texture.id != 0) {
-            owns_font = true;
-            return f;
-        }
-    }
-
-    const char* bitmap_font_path = "game/assets/art/font.png";
-    if (FileExists(bitmap_font_path)) {
-        Image img = LoadImage(bitmap_font_path);
-        if (img.data != nullptr) {
-            const Color key = GetImageColor(img, 0, 0);
-            Font f = LoadFontFromImage(img, key, 32);
-            UnloadImage(img);
-
-            if (f.texture.id != 0) {
-                owns_font = true;
-                return f;
-            }
-        }
-    }
-
-    owns_font = false;
-    return GetFontDefault();
+Font loadUIFont() {
+    const char* path = "game/assets/fonts/AtkinsonHyperlegible-Regular.ttf";
+    return LoadFontEx(path, 40, nullptr, 0);
 }
 
 float uiScreenScale() {

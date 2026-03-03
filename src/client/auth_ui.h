@@ -24,7 +24,6 @@ struct AuthUiState {
     std::string auth_message;
     std::vector<std::string> local_users;
     Texture2D login_bg_tex{};
-    bool login_bg_ready = false;
 };
 
 // Initializes auth UI state from local key files.

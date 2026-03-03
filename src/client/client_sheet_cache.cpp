@@ -23,7 +23,7 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
                             const std::string& key,
                             const std::pair<int, int>& size,
                             const std::string& tsx_rel_path) {
-    bool needs_reload = !entry.ready;
+    bool needs_reload = (entry.tex.id == 0);
     auto sit = entry.size_overrides.find(key);
     if (sit == entry.size_overrides.end() || sit->second != size) {
         entry.size_overrides[key] = size;
@@ -38,14 +38,12 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
 
     const std::string tsx_path = "game/assets/art/" + tsx_rel_path;
     if (!entry.sprites.loadTSX(tsx_path, entry.size_overrides)) {
-        entry.ready = false;
         return false;
     }
 
     const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
     entry.tex = LoadTexture(tex_path.c_str());
-    entry.ready = (entry.tex.id != 0);
-    return entry.ready;
+    return (entry.tex.id != 0);
 }
 
 } // namespace

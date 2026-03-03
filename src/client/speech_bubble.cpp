@@ -100,7 +100,7 @@ void drawTalkBubble(Texture2D speech_tex,
                     float map_view_width,
                     float speech_text_size,
                     float bubble_alpha) {
-    if (speech_tex.id == 0 || text.empty()) return;
+    if (text.empty()) return;
 
     const float ui_scale = uiScreenScale();
     const float tile_px = std::max(12.0f, std::round(map_scale * 16.0f));

@@ -84,26 +84,45 @@ int main(int argc, char** argv) {
     NetClient nc(mailbox, host, port);
     nc.start();
 
+    auto fatalAssetError = [](const char* msg) {
+        while (!WindowShouldClose() && !GetKeyPressed()) {
+            BeginDrawing();
+            ClearBackground(BLACK);
+            DrawText(msg, 20, 20, 20, RED);
+            DrawText("Press any key to quit.", 20, 50, 16, LIGHTGRAY);
+            EndDrawing();
+        }
+        CloseWindow();
+    };
+
     Sprites sprites;
-    Texture2D character_tex{};
-    Texture2D combat_fx_tex{};
-    Texture2D speech_tex{};
-    bool sprite_ready = false;
-    bool combat_fx_ready = false;
-    bool speech_ready = false;
     Sprites::SizeOverrideMap player_size_overrides;
     player_size_overrides["player_1"] = {1, 2};
-    if (sprites.loadTSX("game/assets/art/character.tsx", player_size_overrides)) {
-        const std::string tex_path = "game/assets/art/" + sprites.image_source();
-        character_tex = LoadTexture(tex_path.c_str());
-        sprite_ready = character_tex.id != 0;
+    if (!sprites.loadTSX("game/assets/art/character.tsx", player_size_overrides)) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/character.tsx");
+        return 1;
     }
-    bool owns_ui_font = false;
-    Font ui_font = client::loadUIFont(owns_ui_font);
-    speech_tex = LoadTexture("game/assets/art/speech.png");
-    speech_ready = (speech_tex.id != 0);
-    combat_fx_tex = LoadTexture("game/assets/art/properties.png");
-    combat_fx_ready = (combat_fx_tex.id != 0);
+    const std::string character_tex_path = "game/assets/art/" + sprites.image_source();
+    Texture2D character_tex = LoadTexture(character_tex_path.c_str());
+    if (character_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load character texture");
+        return 1;
+    }
+    Font ui_font = client::loadUIFont();
+    if (ui_font.texture.id == 0) {
+        fatalAssetError("FATAL: Failed to load UI font");
+        return 1;
+    }
+    Texture2D speech_tex = LoadTexture("game/assets/art/speech.png");
+    if (speech_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/speech.png");
+        return 1;
+    }
+    Texture2D combat_fx_tex = LoadTexture("game/assets/art/properties.png");
+    if (combat_fx_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/properties.png");
+        return 1;
+    }
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
@@ -440,30 +459,19 @@ int main(int argc, char** argv) {
             const auto monster_sheet_view = [&](const std::string& tsx) -> client::SpriteSheetView {
                 auto it = monster_sheet_cache.find(tsx);
                 if (it == monster_sheet_cache.end()) return {};
-                return client::SpriteSheetView{
-                    &it->second.sprites,
-                    it->second.tex,
-                    it->second.ready
-                };
+                return client::SpriteSheetView{&it->second.sprites, it->second.tex};
             };
             const auto item_sheet_view = [&](const std::string& tsx) -> client::ItemSheetView {
                 auto it = item_sheet_cache.find(tsx);
                 if (it == item_sheet_cache.end()) return {};
-                return client::ItemSheetView{
-                    &it->second.sprites,
-                    it->second.tex,
-                    it->second.ready
-                };
+                return client::ItemSheetView{&it->second.sprites, it->second.tex};
             };
             client::drawScene(*current_room,
                               *game_state,
                               sprites,
                               character_tex,
-                              sprite_ready,
                               combat_fx_tex,
-                              combat_fx_ready,
                               speech_tex,
-                              speech_ready,
                               monster_sheet_view,
                               item_sheet_view,
                               ui_font,
@@ -498,7 +506,6 @@ int main(int argc, char** argv) {
             client::drawSpeechOverlays(*current_room,
                                        *game_state,
                                        speech_tex,
-                                       speech_ready,
                                        ui_font,
                                        scene_state,
                                        bubble_cfg);
@@ -541,7 +548,7 @@ int main(int argc, char** argv) {
                 }
                 auto it = item_sheet_cache.find(tsx);
                 if (it == item_sheet_cache.end()) return false;
-                if (!it->second.ready) return false;
+                if (it->second.tex.id == 0) return false;
                 const Frame* fr = it->second.sprites.frame(sprite_name, Dir::S, 0, kind);
                 if (!fr && kind == ClipKind::Death) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
                 if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::W, 0, ClipKind::Move);
@@ -696,10 +703,10 @@ int main(int argc, char** argv) {
     client::shutdownAuthUi(auth_ui);
     client::unloadSheetCache(monster_sheet_cache);
     client::unloadSheetCache(item_sheet_cache);
-    if (owns_ui_font) UnloadFont(ui_font);
-    if (combat_fx_tex.id != 0) UnloadTexture(combat_fx_tex);
-    if (speech_tex.id != 0) UnloadTexture(speech_tex);
-    if (character_tex.id != 0) UnloadTexture(character_tex);
+    UnloadFont(ui_font);
+    UnloadTexture(combat_fx_tex);
+    UnloadTexture(speech_tex);
+    UnloadTexture(character_tex);
     CloseWindow();
     return 0;
 }

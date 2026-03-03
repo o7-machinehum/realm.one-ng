@@ -21,18 +21,16 @@ constexpr int kCombatOutcomeHit = 1;
 struct ResolvedSheet {
     const Sprites* sprites;
     Texture2D tex;
-    bool ready;
 };
 
 ResolvedSheet resolveSheet(const std::function<SpriteSheetView(const std::string&)>& view_fn,
                            const std::string& tileset,
-                           const Sprites& fallback, Texture2D fallback_tex, bool fallback_ready) {
+                           const Sprites& fallback, Texture2D fallback_tex) {
     SpriteSheetView sheet_view{};
     if (view_fn) sheet_view = view_fn(tileset);
-    const Sprites* s = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : &fallback;
-    const Texture2D t = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : fallback_tex;
-    const bool r = (sheet_view.ready && sheet_view.sprites) ? true : fallback_ready;
-    return {s, t, r};
+    const Sprites* s = sheet_view.sprites ? sheet_view.sprites : &fallback;
+    const Texture2D t = (sheet_view.texture.id != 0) ? sheet_view.texture : fallback_tex;
+    return {s, t};
 }
 
 float updateAttackTimer(SceneState& state, const std::string& key, uint32_t current_seq, float dt) {
@@ -81,12 +79,11 @@ const Frame* findFrameForItem(const Sprites& sprites, const std::string& sprite_
 // a red damage number that floats upward and fades out.
 void drawCombatOutcomeFx(const SceneState& state, const std::string& key,
                          float feet_x, float feet_y,
-                         Texture2D combat_fx_tex, bool combat_fx_ready,
+                         Texture2D combat_fx_tex,
                          Font ui_font, float tile_w, float tile_h) {
     auto it = state.combat_outcome_fx_by_key.find(key);
     if (it == state.combat_outcome_fx_by_key.end()) return;
     const SceneState::CombatOutcomeFx& fx = it->second;
-    if (!combat_fx_ready || combat_fx_tex.id == 0) return;
     if (fx.timer <= 0.0f || fx.outcome <= 0) return;
 
     const CombatFxAtlas& atlas = combatFxAtlas();
@@ -206,11 +203,8 @@ void drawScene(const Room& room,
                const GameStateMsg& game_state,
                const Sprites& sprites,
                Texture2D character_tex,
-               bool sprite_ready,
                Texture2D combat_fx_tex,
-               bool combat_fx_ready,
                Texture2D speech_tex,
-               bool speech_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
                const std::function<ItemSheetView(const std::string&)>& item_sheet_view,
                Font ui_font,
@@ -243,7 +237,6 @@ void drawScene(const Room& room,
         const MonsterStateMsg* msg = nullptr;
         const Sprites* sprites = nullptr;
         Texture2D tex{};
-        bool ready = false;
         AnimationComponent* anim = nullptr;
         float rx = 0.0f;
         float ry = 0.0f;
@@ -259,7 +252,6 @@ void drawScene(const Room& room,
         const NpcStateMsg* msg = nullptr;
         const Sprites* sprites = nullptr;
         Texture2D tex{};
-        bool ready = false;
         AnimationComponent* anim = nullptr;
         float rx = 0.0f;
         float ry = 0.0f;
@@ -288,7 +280,6 @@ void drawScene(const Room& room,
         const GroundItemStateMsg* msg = nullptr;
         const Sprites* sprites = nullptr;
         Texture2D tex{};
-        bool ready = false;
         Rectangle tile_box{};
     };
     std::vector<GroundItemVisual> ground_items;
@@ -296,13 +287,10 @@ void drawScene(const Room& room,
     for (const auto& item : game_state.items) {
         ItemSheetView sheet_view{};
         if (item_sheet_view) sheet_view = item_sheet_view(item.sprite_tileset);
-        const Sprites* item_sprites = (sheet_view.ready && sheet_view.sprites) ? sheet_view.sprites : nullptr;
-        const Texture2D item_tex = (sheet_view.ready && sheet_view.texture.id != 0) ? sheet_view.texture : Texture2D{};
         ground_items.push_back(GroundItemVisual{
             &item,
-            item_sprites,
-            item_tex,
-            (item_sprites != nullptr && item_tex.id != 0),
+            sheet_view.sprites,
+            sheet_view.texture,
             Rectangle{item.x * tile_w, item.y * tile_h, tile_w, tile_h}
         });
     }
@@ -312,7 +300,7 @@ void drawScene(const Room& room,
     };
 
     for (const auto& m : game_state.monsters) {
-        const auto [mon_sprites, mon_tex, mon_ready] = resolveSheet(monster_sheet_view, m.sprite_tileset, sprites, character_tex, sprite_ready);
+        const auto [mon_sprites, mon_tex] = resolveSheet(monster_sheet_view, m.sprite_tileset, sprites, character_tex);
 
         const std::string key = "m:" + std::to_string(m.id);
         auto& anim = scene_state.anim_by_key[key];
@@ -340,13 +328,13 @@ void drawScene(const Room& room,
 
         monster_click_boxes.push_back({m.id, click_box});
         monster_visuals.push_back(MonsterVisual{
-            &m, mon_sprites, mon_tex, mon_ready, &anim, rx, ry, click_box
+            &m, mon_sprites, mon_tex, &anim, rx, ry, click_box
         });
         draw_cmds.push_back(DrawCmd{ry * tile_h, 0, monster_visuals.size() - 1});
     }
 
     for (const auto& n : game_state.npcs) {
-        const auto [npc_sprites, npc_tex, npc_ready] = resolveSheet(monster_sheet_view, n.sprite_tileset, sprites, character_tex, sprite_ready);
+        const auto [npc_sprites, npc_tex] = resolveSheet(monster_sheet_view, n.sprite_tileset, sprites, character_tex);
 
         const std::string key = "n:" + std::to_string(n.id);
         auto& anim = scene_state.anim_by_key[key];
@@ -363,7 +351,7 @@ void drawScene(const Room& room,
                                         key, n.x, n.y, dt,
                                         cfg.monster_slide_tiles_per_sec);
         npc_visuals.push_back(NpcVisual{
-            &n, npc_sprites, npc_tex, npc_ready, &anim, rx, ry
+            &n, npc_sprites, npc_tex, &anim, rx, ry
         });
         draw_cmds.push_back(DrawCmd{ry * tile_h, 1, npc_visuals.size() - 1});
     }
@@ -446,24 +434,14 @@ void drawScene(const Room& room,
 
     for (const auto& itv : ground_items) {
         if (itv.msg->id == scene_state.dragging_ground_item_id) continue;
-        if (itv.ready && itv.sprites) {
-            const ClipKind kind = itemClipKind(*itv.msg);
-            const Frame* fr = findFrameForItem(*itv.sprites, itv.msg->sprite_name, kind);
-            if (fr) {
-                const Rectangle src = fr->rect();
-                Rectangle dst{itv.tile_box.x, itv.tile_box.y, src.width * cfg.map_scale, src.height * cfg.map_scale};
-                dst.y += tile_h - dst.height;
-                DrawTexturePro(itv.tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
-            } else {
-                DrawRectangleRec(itv.tile_box, GOLD);
-            }
-        } else {
-            DrawRectangle(static_cast<int>(itv.tile_box.x + tile_w * 0.25f),
-                          static_cast<int>(itv.tile_box.y + tile_h * 0.25f),
-                          static_cast<int>(tile_w * 0.5f),
-                          static_cast<int>(tile_h * 0.5f),
-                          GOLD);
-        }
+        if (!itv.sprites) continue;
+        const ClipKind kind = itemClipKind(*itv.msg);
+        const Frame* fr = findFrameForItem(*itv.sprites, itv.msg->sprite_name, kind);
+        if (!fr) continue;
+        const Rectangle src = fr->rect();
+        Rectangle dst{itv.tile_box.x, itv.tile_box.y, src.width * cfg.map_scale, src.height * cfg.map_scale};
+        dst.y += tile_h - dst.height;
+        DrawTexturePro(itv.tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
     }
 
     std::sort(draw_cmds.begin(), draw_cmds.end(), [](const DrawCmd& a, const DrawCmd& b) {
@@ -474,34 +452,15 @@ void drawScene(const Room& room,
     for (const auto& cmd : draw_cmds) {
         if (cmd.kind == 0) {
             const auto& mv = monster_visuals[cmd.idx];
-            if (mv.ready) {
-                drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
-            } else {
-                const float x = mv.rx * tile_w + tile_w * 0.5f;
-                const float y = mv.ry * tile_h + tile_h * 0.5f;
-                DrawCircle(static_cast<int>(x), static_cast<int>(y), 10, RED);
-            }
+            drawActor(*mv.sprites, mv.tex, *mv.anim, mv.rx, mv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
         } else if (cmd.kind == 1) {
             const auto& nv = npc_visuals[cmd.idx];
-            if (nv.ready) {
-                drawActor(*nv.sprites, nv.tex, *nv.anim, nv.rx, nv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
-            } else {
-                const float x = nv.rx * tile_w + tile_w * 0.5f;
-                const float y = nv.ry * tile_h + tile_h * 0.5f;
-                DrawCircle(static_cast<int>(x), static_cast<int>(y), 9, SKYBLUE);
-            }
+            drawActor(*nv.sprites, nv.tex, *nv.anim, nv.rx, nv.ry, tile_w, tile_h, cfg.map_scale, WHITE);
         } else {
             const auto& pv = player_visuals[cmd.idx];
             const auto& p = *pv.msg;
-            if (sprite_ready) {
-                const Color tint = (p.user == game_state.your_user) ? WHITE : LIGHTGRAY;
-                drawActor(sprites, character_tex, *pv.anim, pv.rx, pv.ry, tile_w, tile_h, cfg.map_scale, tint);
-            } else {
-                const float x = pv.rx * tile_w + tile_w * 0.5f;
-                const float y = pv.ry * tile_h + tile_h * 0.5f;
-                const Color c = (p.user == game_state.your_user) ? SKYBLUE : GREEN;
-                DrawCircle(static_cast<int>(x), static_cast<int>(y), 9, c);
-            }
+            const Color tint = (p.user == game_state.your_user) ? WHITE : LIGHTGRAY;
+            drawActor(sprites, character_tex, *pv.anim, pv.rx, pv.ry, tile_w, tile_h, cfg.map_scale, tint);
         }
     }
 
@@ -513,20 +472,16 @@ void drawScene(const Room& room,
                 break;
             }
         }
-        if (drag_item) {
-            if (drag_item->ready && drag_item->sprites) {
-                const ClipKind kind = itemClipKind(*drag_item->msg);
-                const Frame* fr = findFrameForItem(*drag_item->sprites, drag_item->msg->sprite_name, kind);
-                if (fr) {
-                    const Rectangle src = fr->rect();
-                    Rectangle dst{mouse_local.x - (src.width * cfg.map_scale * 0.5f),
-                                  mouse_local.y - (src.height * cfg.map_scale * 0.75f),
-                                  src.width * cfg.map_scale,
-                                  src.height * cfg.map_scale};
-                    DrawTexturePro(drag_item->tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, 0.85f));
-                }
-            } else {
-                DrawCircleV(mouse_local, 8.0f, Fade(GOLD, 0.8f));
+        if (drag_item && drag_item->sprites) {
+            const ClipKind kind = itemClipKind(*drag_item->msg);
+            const Frame* fr = findFrameForItem(*drag_item->sprites, drag_item->msg->sprite_name, kind);
+            if (fr) {
+                const Rectangle src = fr->rect();
+                Rectangle dst{mouse_local.x - (src.width * cfg.map_scale * 0.5f),
+                              mouse_local.y - (src.height * cfg.map_scale * 0.75f),
+                              src.width * cfg.map_scale,
+                              src.height * cfg.map_scale};
+                DrawTexturePro(drag_item->tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, 0.85f));
             }
         }
     }
@@ -538,7 +493,7 @@ void drawScene(const Room& room,
         drawCombatOutcomeFx(scene_state, "m:" + std::to_string(m.id),
                             mv.rx * tile_w + mv.click_box.width * 0.5f,
                             mv.ry * tile_h + tile_h * 0.5f,
-                            combat_fx_tex, combat_fx_ready, ui_font, tile_w, tile_h);
+                            combat_fx_tex, ui_font, tile_w, tile_h);
         const float label_size = cfg.monster_name_text_size * uiScreenScale();
         const float name_w = MeasureTextEx(ui_font, m.name.c_str(), label_size, 1.0f).x;
         drawUiText(ui_font, m.name, mv.click_box.x + (mv.click_box.width - name_w) * 0.5f, bar_y - (label_size + 3.0f), label_size, ORANGE);
@@ -551,7 +506,7 @@ void drawScene(const Room& room,
         Rectangle player_bar{x - (tile_w / 2.0f), y - tile_h - 10.0f, tile_w, 5.0f};
         drawHealthBar(player_bar.x, player_bar.y, player_bar.width, p.hp, p.max_hp);
         drawCombatOutcomeFx(scene_state, "p:" + p.user, x, y,
-                            combat_fx_tex, combat_fx_ready, ui_font, tile_w, tile_h);
+                            combat_fx_tex, ui_font, tile_w, tile_h);
 
         // Floating "+N exp" text when your player gains XP
         if (p.user == game_state.your_user && scene_state.xp_gain_timer > 0.0f) {
@@ -605,7 +560,6 @@ void drawScene(const Room& room,
 void drawSpeechOverlays(const Room& room,
                         const GameStateMsg& game_state,
                         Texture2D speech_tex,
-                        bool speech_ready,
                         Font ui_font,
                         SceneState& scene_state,
                         const SceneConfig& cfg) {
@@ -660,22 +614,9 @@ void drawSpeechOverlays(const Room& room,
     });
 
     for (const auto& b : bubbles) {
-        if (speech_ready && speech_tex.id != 0) {
-            drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text,
-                           b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width,
-                           cfg.speech_text_size, cfg.speech_bubble_alpha);
-        } else {
-            const float font_size = std::max(10.0f, cfg.speech_text_size * uiScreenScale());
-            const Vector2 text_size = MeasureTextEx(ui_font, b.text.c_str(), font_size, 1.0f);
-            const float bubble_w = std::max(32.0f, text_size.x + 14.0f);
-            const float bubble_h = std::max(18.0f, text_size.y + 10.0f);
-            const float bubble_x = b.head_x - bubble_w * 0.5f;
-            const float bubble_y = b.head_y - bubble_h - 18.0f;
-            const unsigned char a = static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, cfg.speech_bubble_alpha)) * 255.0f);
-            DrawRectangleRounded(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 0.2f, 6, Color{250, 250, 250, a});
-            DrawRectangleLinesEx(Rectangle{bubble_x, bubble_y, bubble_w, bubble_h}, 1.0f, Color{20, 20, 20, a});
-            drawUiText(ui_font, b.text, bubble_x + 7.0f, bubble_y + 5.0f, font_size, BLACK);
-        }
+        drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text,
+                       b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width,
+                       cfg.speech_text_size, cfg.speech_bubble_alpha);
     }
 }
 

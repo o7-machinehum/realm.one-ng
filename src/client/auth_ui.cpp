@@ -82,17 +82,13 @@ namespace client {
 void initAuthUi(AuthUiState& state) {
     state = AuthUiState{};
     state.local_users = listLocalKeyUsernames();
-    if (FileExists("game/assets/ui/login_bg.png")) {
-        state.login_bg_tex = LoadTexture("game/assets/ui/login_bg.png");
-        state.login_bg_ready = state.login_bg_tex.id != 0;
-    }
+    state.login_bg_tex = LoadTexture("game/assets/ui/login_bg.png");
 }
 
 void shutdownAuthUi(AuthUiState& state) {
-    if (state.login_bg_ready && state.login_bg_tex.id != 0) {
+    if (state.login_bg_tex.id != 0) {
         UnloadTexture(state.login_bg_tex);
     }
-    state.login_bg_ready = false;
     state.login_bg_tex = Texture2D{};
 }
 
@@ -126,7 +122,7 @@ bool tickAndDrawAuthUi(AuthUiState& state,
     BeginDrawing();
     ClearBackground(BLACK);
 
-    if (state.login_bg_ready) {
+    {
         const float sw = static_cast<float>(GetScreenWidth());
         const float sh = static_cast<float>(GetScreenHeight());
         const float tw = static_cast<float>(state.login_bg_tex.width);
@@ -138,8 +134,6 @@ bool tickAndDrawAuthUi(AuthUiState& state,
         Rectangle dst{(sw - dw) * 0.5f, (sh - dh) * 0.5f, dw, dh};
         DrawTexturePro(state.login_bg_tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
         DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{0, 0, 0, 95});
-    } else {
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 24, 255});
     }
     const float panel_w = 640.0f;
     const float panel_h = 360.0f;

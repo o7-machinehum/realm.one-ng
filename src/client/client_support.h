@@ -46,7 +46,7 @@ void drawActor(const Sprites& sprites,
                float scale,
                Color tint);
 
-Font loadUIFont(bool& owns_font);
+Font loadUIFont();
 float uiScreenScale();
 void drawUiText(Font font, const std::string& text, float x, float y, float size, Color color);
 void drawHealthBar(float x, float y, float w, int hp, int max_hp);

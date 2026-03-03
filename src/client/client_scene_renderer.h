@@ -69,7 +69,6 @@ struct SceneOutput {
 struct SpriteSheetView {
     const Sprites* sprites = nullptr;
     Texture2D texture{};
-    bool ready = false;
 };
 
 using ItemSheetView = SpriteSheetView;
@@ -78,11 +77,8 @@ void drawScene(const Room& room,
                const GameStateMsg& game_state,
                const Sprites& sprites,
                Texture2D character_tex,
-               bool sprite_ready,
                Texture2D combat_fx_tex,
-               bool combat_fx_ready,
                Texture2D speech_tex,
-               bool speech_ready,
                const std::function<SpriteSheetView(const std::string&)>& monster_sheet_view,
                const std::function<ItemSheetView(const std::string&)>& item_sheet_view,
                Font ui_font,
@@ -94,7 +90,6 @@ void drawScene(const Room& room,
 void drawSpeechOverlays(const Room& room,
                         const GameStateMsg& game_state,
                         Texture2D speech_tex,
-                        bool speech_ready,
                         Font ui_font,
                         SceneState& scene_state,
                         const SceneConfig& cfg);
