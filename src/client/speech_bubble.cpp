@@ -59,6 +59,61 @@ void drawSpeechTile(Texture2D tex, int tile_id, float x, float y, float size_px,
     DrawTexturePro(tex, src, dst, Vector2{0, 0}, 0.0f, Fade(WHITE, bubble_alpha));
 }
 
+std::string stripBoldMarkers(const std::string& s) {
+    std::string result;
+    result.reserve(s.size());
+    for (char c : s) {
+        if (c != '*') result += c;
+    }
+    return result;
+}
+
+float measureFormattedLine(Font regular, Font bold, const std::string& line,
+                           float font_size, bool& bold_state) {
+    float width = 0.0f;
+    std::string segment;
+    for (char c : line) {
+        if (c == '*') {
+            if (!segment.empty()) {
+                Font f = bold_state ? bold : regular;
+                width += MeasureTextEx(f, segment.c_str(), font_size, 1.0f).x;
+                segment.clear();
+            }
+            bold_state = !bold_state;
+        } else {
+            segment += c;
+        }
+    }
+    if (!segment.empty()) {
+        Font f = bold_state ? bold : regular;
+        width += MeasureTextEx(f, segment.c_str(), font_size, 1.0f).x;
+    }
+    return width;
+}
+
+void drawFormattedLine(Font regular, Font bold, const std::string& line,
+                       float x, float y, float font_size, Color color, bool& bold_state) {
+    float cursor_x = x;
+    std::string segment;
+    for (char c : line) {
+        if (c == '*') {
+            if (!segment.empty()) {
+                Font f = bold_state ? bold : regular;
+                DrawTextEx(f, segment.c_str(), Vector2{cursor_x, y}, font_size, 1.0f, color);
+                cursor_x += MeasureTextEx(f, segment.c_str(), font_size, 1.0f).x;
+                segment.clear();
+            }
+            bold_state = !bold_state;
+        } else {
+            segment += c;
+        }
+    }
+    if (!segment.empty()) {
+        Font f = bold_state ? bold : regular;
+        DrawTextEx(f, segment.c_str(), Vector2{cursor_x, y}, font_size, 1.0f, color);
+    }
+}
+
 } // namespace
 
 std::vector<std::string> wrapSpeechText(Font font,
@@ -77,7 +132,7 @@ std::vector<std::string> wrapSpeechText(Font font,
     std::string line;
     while (iss >> word) {
         std::string candidate = line.empty() ? word : (line + " " + word);
-        const float w = MeasureTextEx(font, candidate.c_str(), font_size, 1.0f).x;
+        const float w = MeasureTextEx(font, stripBoldMarkers(candidate).c_str(), font_size, 1.0f).x;
         if (w <= max_text_width || line.empty()) {
             line = std::move(candidate);
         } else {
@@ -90,8 +145,20 @@ std::vector<std::string> wrapSpeechText(Font font,
     return out;
 }
 
+/*
+Labeled in tiled...
+
+    deeeeef
+    agggggb
+    agggggb
+    chhihht
+       j
+       O
+*/
+
 void drawTalkBubble(Texture2D speech_tex,
                     Font ui_font,
+                    Font ui_bold_font,
                     const std::string& speech_type,
                     const std::string& text,
                     float head_x,
@@ -109,8 +176,13 @@ void drawTalkBubble(Texture2D speech_tex,
     const std::vector<std::string> lines = wrapSpeechText(ui_font, text, font_size, max_text_width);
 
     float max_line_w = 0.0f;
-    for (const auto& line : lines) {
-        max_line_w = std::max(max_line_w, MeasureTextEx(ui_font, line.c_str(), font_size, 1.0f).x);
+    {
+        bool size_bold = false;
+        for (const auto& line : lines) {
+            bool temp_bold = size_bold;
+            max_line_w = std::max(max_line_w, measureFormattedLine(ui_font, ui_bold_font, line, font_size, temp_bold));
+            size_bold = temp_bold;
+        }
     }
     const float line_h = MeasureTextEx(ui_font, "Ag", font_size, 1.0f).y;
     const float text_block_h = line_h * static_cast<float>(lines.size()) +
@@ -176,11 +248,13 @@ void drawTalkBubble(Texture2D speech_tex,
 
     // Draw text centered in bubble
     const float text_top = bubble_y + (bubble_h - text_block_h) * 0.5f - tile_px * 0.15f;
+    bool bold_state = false;
     for (size_t i = 0; i < lines.size(); ++i) {
-        const float lw = MeasureTextEx(ui_font, lines[i].c_str(), font_size, 1.0f).x;
+        bool measure_bold = bold_state;
+        const float lw = measureFormattedLine(ui_font, ui_bold_font, lines[i], font_size, measure_bold);
         const float text_x = bubble_x + (bubble_w - lw) * 0.5f;
         const float text_y = text_top + static_cast<float>(i) * (line_h + 1.0f);
-        drawUiText(ui_font, lines[i], text_x, text_y, font_size, BLACK);
+        drawFormattedLine(ui_font, ui_bold_font, lines[i], text_x, text_y, font_size, BLACK, bold_state);
     }
 }
 

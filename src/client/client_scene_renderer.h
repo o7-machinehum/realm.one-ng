@@ -91,6 +91,7 @@ void drawSpeechOverlays(const Room& room,
                         const GameStateMsg& game_state,
                         Texture2D speech_tex,
                         Font ui_font,
+                        Font ui_bold_font,
                         SceneState& scene_state,
                         const SceneConfig& cfg);
 

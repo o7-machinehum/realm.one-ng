@@ -6,7 +6,7 @@ wander_radius = 2
 
 [[dialogue]]
 question = "hi, hello, hey"
-response = "Welcome. These Nude Boys are giving me a hard time outside. I think I might have some **work** for you"
+response = "Welcome. These Nude Boys are giving me a hard time outside. I think I might have some *work* for you"
 
 [[dialogue]]
 question = "house, home"

@@ -17,6 +17,7 @@ namespace client {
 // Draws a nine-patch speech bubble with a tail pointing at (head_x, head_y).
 void drawTalkBubble(Texture2D speech_tex,
                     Font ui_font,
+                    Font ui_bold_font,
                     const std::string& speech_type,
                     const std::string& text,
                     float head_x,

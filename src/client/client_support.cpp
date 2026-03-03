@@ -144,6 +144,11 @@ Font loadUIFont() {
     return LoadFontEx(path, 40, nullptr, 0);
 }
 
+Font loadUIBoldFont() {
+    const char* path = "game/assets/fonts/AtkinsonHyperlegible-Bold.ttf";
+    return LoadFontEx(path, 40, nullptr, 0);
+}
+
 float uiScreenScale() {
     constexpr float kUiBaseW = 1200.0f;
     constexpr float kUiBaseH = 760.0f;

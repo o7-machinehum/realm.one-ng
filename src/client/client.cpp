@@ -113,6 +113,11 @@ int main(int argc, char** argv) {
         fatalAssetError("FATAL: Failed to load UI font");
         return 1;
     }
+    Font ui_bold_font = client::loadUIBoldFont();
+    if (ui_bold_font.texture.id == 0) {
+        fatalAssetError("FATAL: Failed to load UI bold font");
+        return 1;
+    }
     Texture2D speech_tex = LoadTexture("game/assets/art/speech.png");
     if (speech_tex.id == 0) {
         fatalAssetError("FATAL: Failed to load game/assets/art/speech.png");
@@ -507,6 +512,7 @@ int main(int argc, char** argv) {
                                        *game_state,
                                        speech_tex,
                                        ui_font,
+                                       ui_bold_font,
                                        scene_state,
                                        bubble_cfg);
         }
@@ -703,6 +709,7 @@ int main(int argc, char** argv) {
     client::shutdownAuthUi(auth_ui);
     client::unloadSheetCache(monster_sheet_cache);
     client::unloadSheetCache(item_sheet_cache);
+    UnloadFont(ui_bold_font);
     UnloadFont(ui_font);
     UnloadTexture(combat_fx_tex);
     UnloadTexture(speech_tex);

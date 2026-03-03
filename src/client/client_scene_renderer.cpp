@@ -561,6 +561,7 @@ void drawSpeechOverlays(const Room& room,
                         const GameStateMsg& game_state,
                         Texture2D speech_tex,
                         Font ui_font,
+                        Font ui_bold_font,
                         SceneState& scene_state,
                         const SceneConfig& cfg) {
     struct Bubble {
@@ -614,7 +615,7 @@ void drawSpeechOverlays(const Room& room,
     });
 
     for (const auto& b : bubbles) {
-        drawTalkBubble(speech_tex, ui_font, b.speech_type, b.text,
+        drawTalkBubble(speech_tex, ui_font, ui_bold_font, b.speech_type, b.text,
                        b.head_x, b.head_y, cfg.map_scale, cfg.map_view_width,
                        cfg.speech_text_size, cfg.speech_bubble_alpha);
     }
