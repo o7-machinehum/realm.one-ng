@@ -1,11 +1,7 @@
-# Example Game
+# Realm One
+Read the Wiki [here](https://github.com/o7-machinehum/realm.one-ng/wiki)
 
+## Building
 ```
 cmake -S . -B build
 ```
-
-## Tasks
-- Final Goal
-    - Login
-    - Walk around
-    - Other players can login / walk around
