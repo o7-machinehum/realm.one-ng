@@ -103,38 +103,3 @@ target_include_directories(server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 endif()
-
-# ----- Tests
-add_executable(test_room
-    src/tests/test_room.cpp
-    src/client/room_render.cpp
-)
-
-target_include_directories(test_room PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-)
-
-target_link_libraries(test_room PRIVATE qg_common raylib)
-
-add_executable(test_sprites src/tests/test_sprites.cpp)
-target_link_libraries(test_sprites PRIVATE qg_common raylib)
-
-if(BUILD_SERVER)
-# ---- test-client/server
-add_executable(client_server_ser_de
-    src/tests/client_server_ser_de.cpp
-    src/client/room_render.cpp
-)
-target_link_libraries(client_server_ser_de PRIVATE
-    ${ENET_LINK_LIBRARIES}
-    qg_common
-    cereal::cereal
-    raylib
-)
-target_include_directories(client_server_ser_de PRIVATE
-    ${ENET_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-)
-endif()

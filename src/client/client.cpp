@@ -257,10 +257,9 @@ int main(int argc, char** argv) {
             if (IsKeyPressed(KEY_B)) mailbox.push(MsgType::Drop, DropMsg{0});
         }
 
+        // --- Print chat to the screen ---
         if (auto chat = mailbox.pop<ChatMsg>(MsgType::Chat)) {
-            const std::string from = chat->from.empty()
-                ? (game_state ? game_state->your_user : std::string{})
-                : chat->from;
+            const std::string from = chat->from;
             if (!from.empty() && !chat->text.empty()) {
                 scene_state.speech_text_by_user[from] = chat->text;
                 scene_state.speech_type_by_user[from] = chat->speech_type.empty() ? "talk" : chat->speech_type;

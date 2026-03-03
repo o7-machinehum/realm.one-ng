@@ -3,3 +3,5 @@ build/
 tags
 data/keys/
 compile_commands.json
+.cache
+.github

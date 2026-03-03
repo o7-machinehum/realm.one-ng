@@ -20,7 +20,7 @@ Each NPC template is one `.toml` file in this folder.
 Use repeated `[[dialogue]]` blocks:
 
 - `question` (or `questions`): comma-separated keywords/phrases
-- `response` (or `responce`): NPC reply text
+- `response`: NPC reply text
 
 Example:
 

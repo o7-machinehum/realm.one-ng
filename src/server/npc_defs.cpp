@@ -121,7 +121,7 @@ bool parseTomlSubsetFile(const fs::path& p, NpcDef& out) {
             if (key == "question" || key == "questions" || key == "topic") {
                 std::vector<std::string> parts = splitQuestions(raw_val);
                 current_dialogue.questions.insert(current_dialogue.questions.end(), parts.begin(), parts.end());
-            } else if (key == "response" || key == "responce") {
+            } else if (key == "response") {
                 current_dialogue.response = parseStringValue(raw_val);
             }
             continue;
