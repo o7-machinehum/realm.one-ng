@@ -1,5 +1,28 @@
 #include "combat.h"
 
+// ---- Derived player combat stats ----
+int computePlayerOffence(const PlayerRuntime& p, const ServerState& state) {
+    const int melee = computeLevelFromXp(state.settings.progression, p.data.melee_xp).level;
+    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::attack);
+    return std::max(1, melee + equip);
+}
+
+int computePlayerDefence(const PlayerRuntime& p, const ServerState& state) {
+    const int skill = computeLevelFromXp(state.settings.progression, p.data.shielding_xp).level;
+    return std::max(1, skill);
+}
+
+int computePlayerArmor(const PlayerRuntime& p, const ServerState& state) {
+    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::defense);
+    return std::max(0, equip);
+}
+
+int computePlayerEvasion(const PlayerRuntime& p, const ServerState& state) {
+    const int skill = computeLevelFromXp(state.settings.progression, p.data.evasion_xp).level;
+    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::evasion);
+    return std::max(1, skill + equip);
+}
+
 bool eval_death(ServerState& state, PlayerRuntime p, MonsterRuntime mon, TickResult& result) {
     // If the monster is dead
     if (mon.hp <= 0) {

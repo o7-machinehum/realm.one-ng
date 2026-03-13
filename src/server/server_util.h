@@ -71,16 +71,8 @@ struct LevelInfo {
     const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id,
     int ItemDef::*member_ptr);
 
-// ---- Derived player combat stats ----
 
-// Computes effective offensive power from melee skill + equipment.
-[[nodiscard]] int computePlayerOffence(const PlayerRuntime& p, const ServerState& state);
-// Computes effective defence from shielding skill.
-[[nodiscard]] int computePlayerDefence(const PlayerRuntime& p, const ServerState& state);
-// Computes effective armor value from equipment defense bonuses.
-[[nodiscard]] int computePlayerArmor(const PlayerRuntime& p, const ServerState& state);
-// Computes effective evasion from evasion skill + equipment.
-[[nodiscard]] int computePlayerEvasion(const PlayerRuntime& p, const ServerState& state);
+
 // Recalculates max HP from the player's level and adjusts current HP accordingly.
 void updatePlayerVitalsFromLevel(PlayerRuntime& p, const ServerState& state);
 

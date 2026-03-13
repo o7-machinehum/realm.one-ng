@@ -103,51 +103,6 @@ LevelInfo computeLevelFromXp(const ProgressionSettings& p, int xp_total) {
     return info;
 }
 
-// ---- Equipment stat bonuses ----
-
-int computeEquippedStatBonus(
-    const PersistedPlayer& p,
-    const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id,
-    int ItemDef::*member_ptr) {
-    auto findDef = [&](const std::string& raw) -> const ItemDef* {
-        auto it = item_defs_by_id.find(normalizeId(raw));
-        if (it != item_defs_by_id.end() && it->second) return it->second;
-        return nullptr;
-    };
-    int sum = 0;
-    for (const auto& [_, inv_idx] : p.equipment_by_type) {
-        if (inv_idx < 0 || inv_idx >= static_cast<int>(p.inventory.size())) continue;
-        const ItemDef* def = findDef(p.inventory[static_cast<size_t>(inv_idx)]);
-        if (!def) continue;
-        sum += def->*member_ptr;
-    }
-    return sum;
-}
-
-// ---- Derived player combat stats ----
-
-int computePlayerOffence(const PlayerRuntime& p, const ServerState& state) {
-    const int melee = computeLevelFromXp(state.settings.progression, p.data.melee_xp).level;
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::attack);
-    return std::max(1, melee + equip);
-}
-
-int computePlayerDefence(const PlayerRuntime& p, const ServerState& state) {
-    const int skill = computeLevelFromXp(state.settings.progression, p.data.shielding_xp).level;
-    return std::max(1, skill);
-}
-
-int computePlayerArmor(const PlayerRuntime& p, const ServerState& state) {
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::defense);
-    return std::max(0, equip);
-}
-
-int computePlayerEvasion(const PlayerRuntime& p, const ServerState& state) {
-    const int skill = computeLevelFromXp(state.settings.progression, p.data.evasion_xp).level;
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::evasion);
-    return std::max(1, skill + equip);
-}
-
 void updatePlayerVitalsFromLevel(PlayerRuntime& p, const ServerState& state) {
     const int lvl = computeLevelFromXp(state.settings.progression, p.data.exp).level;
     const int desired_max_hp = computeMaxHpForLevel(lvl);
