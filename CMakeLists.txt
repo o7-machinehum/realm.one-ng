@@ -88,6 +88,7 @@ add_executable(server
     src/server/global_settings.cpp
     src/server/item_defs.cpp
     src/server/auth_db.cpp
+    src/server/combat.cpp
 )
 
 target_link_libraries(server PRIVATE
