@@ -4,5 +4,5 @@
 constexpr int kMeleeRangeTiles        = 1;
 constexpr int kThrowRangeTiles        = 5;
 constexpr int kNpcTalkRangeTiles      = 10;
-constexpr int kInventoryLimit         = 8;
+constexpr int kInventoryLimit         = 30;
 constexpr int kMonsterIdleChanceDivisor = 4; // 1/N idle chance per tick

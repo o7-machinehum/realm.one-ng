@@ -51,6 +51,8 @@ add_executable(client
     src/client/client_scene_renderer.cpp
     src/client/client_inventory_ui.cpp
     src/client/client_windows.cpp
+    src/client/client_hud.cpp
+    src/client/client_inventory_overlay.cpp
     src/client/net_client.cpp
     src/client/speech_bubble.cpp
     src/client/combat_fx.cpp

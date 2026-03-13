@@ -17,6 +17,8 @@ std::string canonicalEquipType(std::string t) {
     if (t == "legs") return "Legs";
     if (t == "boots") return "Boots";
     if (t == "helmet") return "Helmet";
+    if (t == "ring") return "Ring";
+    if (t == "necklace") return "Necklace";
     return {};
 }
 

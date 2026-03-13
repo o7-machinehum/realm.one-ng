@@ -67,8 +67,10 @@ std::string canonicalEquipType(const std::string& raw) {
     if (n == "armor")  return "Armor";
     if (n == "shield") return "Shield";
     if (n == "legs")   return "Legs";
-    if (n == "boots")  return "Boots";
-    if (n == "helmet") return "Helmet";
+    if (n == "boots")    return "Boots";
+    if (n == "helmet")   return "Helmet";
+    if (n == "ring")     return "Ring";
+    if (n == "necklace") return "Necklace";
     return {};
 }
 

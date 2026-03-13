@@ -3,13 +3,13 @@
 #include "client_support.h"
 #include "client_ui_primitives.h"
 #include "client_game_ui.h"
-#include "client_inventory_ui.h"
+#include "client_hud.h"
+#include "client_inventory_overlay.h"
 #include "client_layout.h"
 #include "client_scene_renderer.h"
 #include "client_sheet_cache.h"
 #include "string_util.h"
 #include "ui_settings.h"
-#include "client_windows.h"
 #include "auth_ui.h"
 #include "msg.h"
 #include "monster_defs.h"
@@ -31,12 +31,7 @@ namespace {
 constexpr int kInitialWindowW = 1200;
 constexpr int kInitialWindowH = 760;
 constexpr int kMaxInputChars = 180;
-constexpr int kGameplayBottomPanelPx = 0;
-constexpr float kPlayViewportMaxWidthRatio = 0.92f;
-constexpr float kPlayViewportMaxHeightRatio = 0.88f;
-constexpr float kDockMarginTop = 10.0f;
-constexpr float kDockMarginRight = 10.0f;
-constexpr float kDockWindowGapY = 8.0f;
+constexpr float kFallbackScale = 2.0f;
 constexpr float kInputOverlayHeight = 34.0f;
 constexpr float kInputOverlayMargin = 8.0f;
 constexpr float kInputTextOffsetX = 8.0f;
@@ -72,6 +67,7 @@ bool parseSpeechInput(const std::string& input, ChatMsg& out) {
 // Owns the client runtime: input, networking mailbox pump, and frame rendering.
 int main(int argc, char** argv) {
     InitWindow(kInitialWindowW, kInitialWindowH, "The Island");
+    SetWindowState(FLAG_WINDOW_RESIZABLE);
     SetTargetFPS(60);
 
     std::string host = "127.0.0.1";
@@ -128,6 +124,18 @@ int main(int argc, char** argv) {
         fatalAssetError("FATAL: Failed to load game/assets/art/properties.png");
         return 1;
     }
+    Texture2D hotbar_tex = LoadTexture("game/assets/art/widgets/hotbar.png");
+    if (hotbar_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/widgets/hotbar.png");
+        return 1;
+    }
+    SetTextureFilter(hotbar_tex, TEXTURE_FILTER_POINT);
+    Texture2D equip_tex = LoadTexture("game/assets/art/widgets/equiptment_bar.png");
+    if (equip_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/widgets/equiptment_bar.png");
+        return 1;
+    }
+    SetTextureFilter(equip_tex, TEXTURE_FILTER_POINT);
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
@@ -144,8 +152,8 @@ int main(int argc, char** argv) {
     std::string input;
     std::string last_event;
     client::SceneState scene_state;
-    client::InventoryUiState inventory_ui_state;
-    client::UiWindowsState ui_windows_state;
+    client::HudState hud_state;
+    client::InventoryOverlayState overlay_state;
     std::unordered_map<std::string, client::SpriteSheetCacheEntry> monster_sheet_cache;
     std::unordered_map<std::string, client::SpriteSheetCacheEntry> item_sheet_cache;
     std::unordered_map<std::string, client::ItemUiDef> item_defs_by_key;
@@ -159,7 +167,6 @@ int main(int argc, char** argv) {
     client::initAuthUi(auth_ui);
 
     client::SceneConfig scene_cfg{};
-    const client::InventoryUiConfig inventory_cfg{};
     const client::UiSettings ui_settings = client::loadUiSettings("data/global.toml");
     scene_cfg.speech_bubble_alpha = ui_settings.speech_bubble_alpha;
     scene_cfg.player_name_text_size = ui_settings.player_name_text_size;
@@ -183,6 +190,11 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        const float dt = GetFrameTime();
+
+        // Tick overlay fade
+        client::tickInventoryOverlay(overlay_state, dt);
+
         if (chat_input_active) {
             while (int key = GetCharPressed()) {
                 if (key >= 32 && key <= 126 && input.size() < kMaxInputChars) {
@@ -193,6 +205,16 @@ int main(int argc, char** argv) {
 
         if (chat_input_active && IsKeyPressed(KEY_BACKSPACE) && !input.empty()) {
             input.pop_back();
+        }
+
+        // I key: toggle inventory overlay
+        if (!chat_input_active && IsKeyPressed(KEY_I)) {
+            overlay_state.visible = !overlay_state.visible;
+        }
+
+        // ESC: close overlay if open
+        if (!chat_input_active && IsKeyPressed(KEY_ESCAPE) && overlay_state.visible) {
+            overlay_state.visible = false;
         }
 
         if (IsKeyPressed(KEY_ENTER)) {
@@ -232,7 +254,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (game_state.has_value() && !chat_input_active) {
+        if (game_state.has_value() && !chat_input_active && !overlay_state.visible) {
             int mx = 0;
             int my = 0;
             if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) my = -1;
@@ -241,7 +263,6 @@ int main(int argc, char** argv) {
             else if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) mx = 1;
 
             const bool moving = (mx != 0 || my != 0);
-            const float dt = GetFrameTime();
             const bool rotating_only = moving && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
             if (!moving) {
                 move_repeat_timer = 0.0f;
@@ -364,7 +385,7 @@ int main(int argc, char** argv) {
 
         // Tick room transition timer
         if (transition_timer > 0.0f) {
-            transition_timer = std::max(0.0f, transition_timer - GetFrameTime());
+            transition_timer = std::max(0.0f, transition_timer - dt);
             if (transition_timer <= 0.0f) {
                 prev_room.reset();
                 prev_rr.unload();
@@ -374,47 +395,18 @@ int main(int argc, char** argv) {
         BeginDrawing();
         ClearBackground(BLACK);
 
-        const int side_w = static_cast<int>(inventory_cfg.panel_w);
-        const int bottom_h = kGameplayBottomPanelPx;
-        const client::PlayLayout play_layout = client::computePlayLayout(
-            current_room, side_w, bottom_h, kPlayViewportMaxWidthRatio, kPlayViewportMaxHeightRatio, scene_cfg.map_scale);
-        const Rectangle play_rect = play_layout.play_rect;
-        const int play_x = static_cast<int>(play_rect.x);
-        const int play_y = static_cast<int>(play_rect.y);
-        const int play_w = static_cast<int>(play_rect.width);
-        const int play_h = static_cast<int>(play_rect.height);
+        const int screen_w = GetScreenWidth();
+        const int screen_h = GetScreenHeight();
 
-        // Right-lane windows are persisted in state; we only seed defaults once.
-        const float right_x = static_cast<float>(GetScreenWidth()) - inventory_cfg.panel_w - kDockMarginRight;
-        auto& vitals_window = client::ensureWindow(ui_windows_state, "vitals", "Health / Mana", Rectangle{right_x, kDockMarginTop, inventory_cfg.panel_w, 106.0f}, true);
-        auto& inventory_window = client::ensureWindow(ui_windows_state, "inventory", "Inventory", Rectangle{right_x, 126.0f, inventory_cfg.panel_w, 420.0f}, true);
-        auto& skills_window = client::ensureWindow(ui_windows_state, "skills", "Skills", Rectangle{right_x, 556.0f, inventory_cfg.panel_w, 320.0f}, true);
-        constexpr int kInvSlotLimit = 8;
-        const int inv_rows = std::max(1, (kInvSlotLimit + inventory_cfg.cols - 1) / inventory_cfg.cols);
-        const float inv_body_h = 12.0f + inv_rows * inventory_cfg.slot_size + (inv_rows - 1) * inventory_cfg.gap + 12.0f;
-        inventory_window.rect.height = client::kUiWindowHeaderHeight + inv_body_h;
-        vitals_window.rect.width = inventory_cfg.panel_w;
-        inventory_window.rect.width = inventory_cfg.panel_w;
-        skills_window.rect.width = inventory_cfg.panel_w;
-        vitals_window.rect.x = right_x;
-        inventory_window.rect.x = right_x;
-        skills_window.rect.x = right_x;
-
-        if (ui_windows_state.dragging_id.empty()) {
-            client::snapDockedWindows({&vitals_window, &inventory_window, &skills_window},
-                                      right_x,
-                                      kDockMarginTop,
-                                      kDockWindowGapY);
-        }
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Color{16, 18, 22, 255});
-        DrawRectangleRec(play_rect, BLACK);
-        DrawRectangleLinesEx(play_rect, 1.0f, Color{72, 76, 84, 255});
+        // Fullscreen layout — map fills entire screen, HUD overlays on top
+        const client::PlayLayout play_layout = client::computeFullscreenLayout(
+            current_room, kFallbackScale);
 
         const float render_scale = play_layout.render_scale;
-        const float map_draw_w = play_layout.map_draw_w;
-        const float map_draw_h = play_layout.map_draw_h;
         const float map_origin_x = play_layout.map_origin_x;
         const float map_origin_y = play_layout.map_origin_y;
+        const float map_draw_w = play_layout.map_draw_w;
+        const float map_draw_h = play_layout.map_draw_h;
 
         // Compute transition offsets (zero when no transition active)
         const bool transitioning = (transition_timer > 0.0f && prev_room);
@@ -422,17 +414,16 @@ int main(int argc, char** argv) {
         float old_off_x = 0.0f, old_off_y = 0.0f;
         if (transitioning) {
             const float progress = 1.0f - (transition_timer / transition_duration);
-            old_off_x = -progress * play_w * transition_dir_x;
-            old_off_y = -progress * play_h * transition_dir_y;
-            new_off_x = (1.0f - progress) * play_w * transition_dir_x;
-            new_off_y = (1.0f - progress) * play_h * transition_dir_y;
+            old_off_x = -progress * static_cast<float>(screen_w) * transition_dir_x;
+            old_off_y = -progress * static_cast<float>(screen_h) * transition_dir_y;
+            new_off_x = (1.0f - progress) * static_cast<float>(screen_w) * transition_dir_x;
+            new_off_y = (1.0f - progress) * static_cast<float>(screen_h) * transition_dir_y;
         }
 
-        // World pass: background layers, entities, then foreground layers.
-        // Scissor guarantees world drawing never bleeds outside play viewport.
-        BeginScissorMode(play_x, play_y, play_w, play_h);
+        // World pass: full screen scissor
+        BeginScissorMode(0, 0, screen_w, screen_h);
 
-        // Draw old room (tiles only, frozen snapshot) sliding out
+        // Draw old room sliding out
         if (transitioning) {
             prev_rr.drawUnderEntities(*prev_room, render_scale,
                 Vector2{map_origin_x + old_off_x, map_origin_y + old_off_y});
@@ -440,7 +431,7 @@ int main(int argc, char** argv) {
                 Vector2{map_origin_x + old_off_x, map_origin_y + old_off_y});
         }
 
-        // Draw new room (tiles + entities) sliding in
+        // Draw new room tiles
         if (current_room) {
             rr.drawUnderEntities(*current_room, render_scale,
                 Vector2{map_origin_x + new_off_x, map_origin_y + new_off_y});
@@ -454,13 +445,6 @@ int main(int argc, char** argv) {
             draw_cfg.map_origin_y = map_origin_y + new_off_y;
             draw_cfg.map_view_width = map_draw_w;
             draw_cfg.map_view_height = map_draw_h;
-            draw_cfg.inventory_panel_width = inventory_cfg.panel_w;
-            draw_cfg.inventory_top_offset = inventory_window.rect.y;
-            draw_cfg.inventory_drop_rect = inventory_window.collapsed
-                ? Rectangle{0, 0, 0, 0}
-                : inventory_window.rect;
-            draw_cfg.bottom_panel_height = static_cast<float>(bottom_h);
-            draw_cfg.inventory_visible = !inventory_window.collapsed;
             const auto monster_sheet_view = [&](const std::string& tsx) -> client::SpriteSheetView {
                 auto it = monster_sheet_cache.find(tsx);
                 if (it == monster_sheet_cache.end()) return {};
@@ -480,20 +464,27 @@ int main(int argc, char** argv) {
                               monster_sheet_view,
                               item_sheet_view,
                               ui_font,
-                              GetFrameTime(),
+                              dt,
                               scene_state,
                               draw_cfg,
                               scene_out);
             if (scene_out.attack_click.has_value()) {
                 mailbox.push(MsgType::Attack, *scene_out.attack_click);
             }
+            // If a ground item was "moved" but the mouse is over the HUD,
+            // convert it to a pickup instead.
             if (scene_out.move_ground_item.has_value()) {
-                mailbox.push(MsgType::MoveGroundItem, *scene_out.move_ground_item);
+                const float hud_h = client::hudTotalHeight(static_cast<float>(screen_h));
+                const float hud_top = static_cast<float>(screen_h) - hud_h - (kInputOverlayHeight + kInputOverlayMargin);
+                if (GetMousePosition().y >= hud_top) {
+                    mailbox.push(MsgType::Pickup, PickupMsg{scene_out.move_ground_item->item_id});
+                } else {
+                    mailbox.push(MsgType::MoveGroundItem, *scene_out.move_ground_item);
+                }
             }
             if (scene_out.pickup_ground_item.has_value()) {
                 mailbox.push(MsgType::Pickup, *scene_out.pickup_ground_item);
             }
-
         }
         if (current_room) {
             rr.drawAboveEntities(*current_room, render_scale,
@@ -501,6 +492,7 @@ int main(int argc, char** argv) {
         }
         EndScissorMode();
 
+        // Speech bubbles (drawn outside scissor so they can overlap HUD)
         if (current_room && game_state) {
             client::SceneConfig bubble_cfg = scene_cfg;
             bubble_cfg.map_scale = render_scale;
@@ -517,190 +509,131 @@ int main(int argc, char** argv) {
                                        bubble_cfg);
         }
 
-        // UI pass: window frames first (for hit testing + collapse state),
-        // then each window body contents.
-        if (game_state) {
-            const auto vitals_frame = client::drawWindowFrame(ui_windows_state, ui_font, vitals_window);
-            const auto inv_frame = client::drawWindowFrame(ui_windows_state, ui_font, inventory_window);
-            const auto skills_frame = client::drawWindowFrame(ui_windows_state, ui_font, skills_window);
-
-            if (vitals_frame.open) {
-                const float pad = 10.0f;
-                const float bar_w = std::max(80.0f, vitals_frame.body_rect.width - pad * 2.0f);
-                const float bx = vitals_frame.body_rect.x + (vitals_frame.body_rect.width - bar_w) * 0.5f;
-                const float by = vitals_frame.body_rect.y + 10.0f;
-                client::drawLabeledBar(ui_font, "HP", bx, by, bar_w, 22.0f, game_state->your_hp, game_state->your_max_hp, 115, 38, 38, 255);
-                client::drawLabeledBar(ui_font, "MP", bx, by + 30.0f, bar_w, 22.0f, game_state->your_mana, game_state->your_max_mana, 50, 80, 160, 255);
+        // Draw item icon lambda (shared by HUD and overlay)
+        const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect, Color tint) -> bool {
+            auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
+            std::string tsx;
+            std::string sprite_name;
+            ClipKind kind = ClipKind::Move;
+            if (dit != item_defs_by_key.end()) {
+                const auto& def = dit->second;
+                tsx = def.sprite_tileset;
+                sprite_name = def.id;
+            } else {
+                const std::string corpse_id = parseCorpseMonsterId(item_name);
+                if (corpse_id.empty()) return false;
+                auto mit = monster_defs_by_id.find(corpse_id);
+                if (mit == monster_defs_by_id.end()) return false;
+                tsx = mit->second.sprite_tileset;
+                sprite_name = mit->second.id;
+                kind = ClipKind::Death;
             }
-
-            client::InventoryUiOutput inv_out{};
-            const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect) -> bool {
-                auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
-                std::string tsx;
-                std::string sprite_name;
-                ClipKind kind = ClipKind::Move;
-                if (dit != item_defs_by_key.end()) {
-                    const auto& def = dit->second;
-                    tsx = def.sprite_tileset;
-                    sprite_name = def.id;
-                } else {
-                    const std::string corpse_id = parseCorpseMonsterId(item_name);
-                    if (corpse_id.empty()) return false;
-                    auto mit = monster_defs_by_id.find(corpse_id);
-                    if (mit == monster_defs_by_id.end()) return false;
-                    tsx = mit->second.sprite_tileset;
-                    sprite_name = mit->second.id;
-                    kind = ClipKind::Death;
-                }
-                auto it = item_sheet_cache.find(tsx);
-                if (it == item_sheet_cache.end()) return false;
-                if (it->second.tex.id == 0) return false;
-                const Frame* fr = it->second.sprites.frame(sprite_name, Dir::S, 0, kind);
-                if (!fr && kind == ClipKind::Death) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
-                if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::W, 0, ClipKind::Move);
-                if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
-                if (!fr) return false;
-                const Rectangle src = fr->rect();
-                const float scale = std::min(icon_rect.width / src.width, icon_rect.height / src.height);
-                Rectangle dst{
-                    icon_rect.x + (icon_rect.width - src.width * scale) * 0.5f,
-                    icon_rect.y + (icon_rect.height - src.height * scale) * 0.5f,
-                    src.width * scale,
-                    src.height * scale
-                };
-                DrawTexturePro(it->second.tex, src, dst, Vector2{0, 0}, 0.0f, WHITE);
-                return true;
+            auto it = item_sheet_cache.find(tsx);
+            if (it == item_sheet_cache.end()) return false;
+            if (it->second.tex.id == 0) return false;
+            const Frame* fr = it->second.sprites.frame(sprite_name, Dir::S, 0, kind);
+            if (!fr && kind == ClipKind::Death) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
+            if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::W, 0, ClipKind::Move);
+            if (!fr) fr = it->second.sprites.frame(sprite_name, Dir::S, 0, ClipKind::Move);
+            if (!fr) return false;
+            const Rectangle src = fr->rect();
+            const float scale = std::min(icon_rect.width / src.width, icon_rect.height / src.height);
+            Rectangle dst{
+                icon_rect.x + (icon_rect.width - src.width * scale) * 0.5f,
+                icon_rect.y + (icon_rect.height - src.height * scale) * 0.5f,
+                src.width * scale,
+                src.height * scale
             };
-            const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::string {
-                auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
-                if (dit == item_defs_by_key.end()) return {};
-                return dit->second.equip_type;
-            };
+            DrawTexturePro(it->second.tex, src, dst, Vector2{0, 0}, 0.0f, tint);
+            return true;
+        };
+        const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::string {
+            auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
+            if (dit == item_defs_by_key.end()) return {};
+            return dit->second.equip_type;
+        };
 
-            if (inv_frame.open) {
-                client::drawInventoryUi(ui_font,
-                                        *game_state,
-                                        inventory_ui_state,
-                                        inventory_cfg,
-                                        inv_frame.body_rect,
-                                        draw_inventory_icon,
-                                        resolve_item_equip_type,
-                                        inv_out);
+        const float chat_area_h = kInputOverlayHeight + kInputOverlayMargin;
+
+        // === Inventory Overlay (drawn FIRST so HUD renders on top) ===
+        if (game_state && overlay_state.alpha > 0.0f) {
+            client::InventoryOverlayOutput inv_out{};
+            client::drawInventoryOverlay(ui_font,
+                                         *game_state,
+                                         overlay_state,
+                                         hud_state.drag,
+                                         draw_inventory_icon,
+                                         resolve_item_equip_type,
+                                         inv_out);
+
+            if (inv_out.set_equipment_msg.has_value()) {
+                mailbox.push(MsgType::SetEquipment, *inv_out.set_equipment_msg);
             }
-
-            if (skills_frame.open) {
-                const float pad = 10.0f;
-                const float bar_w = std::max(80.0f, skills_frame.body_rect.width - pad * 2.0f);
-                const float bx = skills_frame.body_rect.x + (skills_frame.body_rect.width - bar_w) * 0.5f;
-                float by = skills_frame.body_rect.y + 6.0f;
-                const float level_w = 24.0f;
-                const float row_h = 16.0f;
-                const float row_gap = 20.0f;
-                const float prog_x = bx + level_w;
-                const float prog_w = std::max(50.0f, bar_w - level_w);
-                const float label_size = 14.0f;
-                auto draw_skill = [&](const char* name,
-                                      int level,
-                                      int xp,
-                                      int xp_to_next,
-                                      int r,
-                                      int g,
-                                      int b) {
-                    client::drawUiText(ui_font,
-                                       std::to_string(std::max(1, level)),
-                                       bx,
-                                       by + 1.0f,
-                                       label_size,
-                                       Color{220, 225, 235, 255});
-                    client::drawLabeledBar(ui_font,
-                                           name,
-                                           prog_x,
-                                           by,
-                                           prog_w,
-                                           row_h,
-                                           xp,
-                                           std::max(1, xp_to_next),
-                                           r,
-                                           g,
-                                           b,
-                                           255);
-                    by += row_gap;
-                };
-                draw_skill("EXP", game_state->your_level, game_state->your_exp, std::max(1, game_state->your_exp_to_next_level), 153, 121, 60);
-                draw_skill("Hit", game_state->skill_melee_level, game_state->skill_melee_xp, game_state->skill_melee_xp_to_next, 128, 88, 42);
-                draw_skill("Block", game_state->skill_shielding_level, game_state->skill_shielding_xp, game_state->skill_shielding_xp_to_next, 72, 104, 144);
-                draw_skill("Evade", game_state->skill_evasion_level, game_state->skill_evasion_xp, game_state->skill_evasion_xp_to_next, 112, 112, 112);
-                draw_skill("Distance", game_state->skill_distance_level, game_state->skill_distance_xp, game_state->skill_distance_xp_to_next, 80, 126, 80);
-                draw_skill("Magic", game_state->skill_magic_level, game_state->skill_magic_xp, game_state->skill_magic_xp_to_next, 82, 72, 153);
-
-                const float txt_size = 14.0f;
-                const float y1 = std::max(by + 2.0f, skills_frame.body_rect.y + skills_frame.body_rect.height - 66.0f);
-                client::drawUiText(ui_font,
-                                   "Attack: " + std::to_string(game_state->trait_attack),
-                                   bx,
-                                   y1,
-                                   txt_size,
-                                   Color{255, 205, 164, 255});
-                client::drawUiText(ui_font,
-                                   "Shielding: " + std::to_string(game_state->trait_shielding),
-                                   bx,
-                                   y1 + 14.0f,
-                                   txt_size,
-                                   Color{190, 218, 255, 255});
-                client::drawUiText(ui_font,
-                                   "Evasion: " + std::to_string(game_state->trait_evasion),
-                                   bx,
-                                   y1 + 28.0f,
-                                   txt_size,
-                                   Color{225, 225, 225, 255});
-                client::drawUiText(ui_font,
-                                   "Armor: " + std::to_string(game_state->trait_armor),
-                                   bx,
-                                   y1 + 42.0f,
-                                   txt_size,
-                                   Color{203, 219, 177, 255});
-            }
-
             if (inv_out.swap_msg.has_value()) {
                 mailbox.push(MsgType::InventorySwap, *inv_out.swap_msg);
             }
-            if (inv_out.drop_msg.has_value()) {
-                DropMsg drop = *inv_out.drop_msg;
+        }
+
+        // === Bottom HUD (drawn AFTER overlay, on top of dim background) ===
+        if (game_state) {
+            client::HudOutput hud_out{};
+            client::drawHud(ui_font,
+                            *game_state,
+                            hud_state,
+                            hotbar_tex,
+                            equip_tex,
+                            scene_state.dragging_ground_item_id,
+                            overlay_state.visible,
+                            chat_area_h,
+                            dt,
+                            draw_inventory_icon,
+                            resolve_item_equip_type,
+                            hud_out);
+
+            if (hud_out.set_equipment_msg.has_value()) {
+                mailbox.push(MsgType::SetEquipment, *hud_out.set_equipment_msg);
+            }
+            if (hud_out.pickup_ground_item.has_value()) {
+                mailbox.push(MsgType::Pickup, *hud_out.pickup_ground_item);
+            }
+            if (hud_out.drop_msg.has_value()) {
+                DropMsg drop = *hud_out.drop_msg;
                 if (current_room) {
-                    // Convert drop target from screen-space mouse to map tile-space.
                     const Vector2 m = GetMousePosition();
                     const float eff_ox = map_origin_x + new_off_x;
                     const float eff_oy = map_origin_y + new_off_y;
-                    if (m.x >= eff_ox && m.y >= eff_oy &&
-                        m.x < (eff_ox + map_draw_w) &&
-                        m.y < (eff_oy + map_draw_h)) {
-                        const float tile_w = current_room->tile_width() * render_scale;
-                        const float tile_h = current_room->tile_height() * render_scale;
-                        if (tile_w > 0.0f && tile_h > 0.0f) {
-                            drop.to_x = static_cast<int>(std::floor((m.x - eff_ox) / tile_w));
-                            drop.to_y = static_cast<int>(std::floor((m.y - eff_oy) / tile_h));
-                        }
+                    const float tile_w = current_room->tile_width() * render_scale;
+                    const float tile_h = current_room->tile_height() * render_scale;
+                    if (tile_w > 0.0f && tile_h > 0.0f) {
+                        drop.to_x = static_cast<int>(std::floor((m.x - eff_ox) / tile_w));
+                        drop.to_y = static_cast<int>(std::floor((m.y - eff_oy) / tile_h));
                     }
                 }
                 mailbox.push(MsgType::Drop, drop);
             }
-            if (inv_out.set_equipment_msg.has_value()) {
-                mailbox.push(MsgType::SetEquipment, *inv_out.set_equipment_msg);
+            if (hud_out.swap_msg.has_value()) {
+                mailbox.push(MsgType::InventorySwap, *hud_out.swap_msg);
             }
         }
 
+        // Chat input overlay at the very bottom of the screen
+        // Chat matches HUD idle opacity, becomes visible on Enter or when overlay is open
+        const float chat_alpha = (chat_input_active || overlay_state.visible)
+                                 ? client::kHudActiveAlpha
+                                 : client::kHudIdleAlpha;
         client::drawChatInputOverlay(ui_font,
-                                     play_x,
-                                     play_y,
-                                     play_w,
-                                     play_h,
+                                     0,
+                                     0,
+                                     screen_w,
+                                     screen_h,
                                      kInputOverlayMargin,
                                      kInputOverlayHeight,
                                      kInputTextOffsetX,
                                      kInputTextOffsetY,
                                      kInputFontSize,
                                      input,
-                                     chat_input_active);
+                                     chat_input_active,
+                                     chat_alpha);
 
         EndDrawing();
     }
@@ -711,6 +644,8 @@ int main(int argc, char** argv) {
     client::unloadSheetCache(item_sheet_cache);
     UnloadFont(ui_bold_font);
     UnloadFont(ui_font);
+    UnloadTexture(equip_tex);
+    UnloadTexture(hotbar_tex);
     UnloadTexture(combat_fx_tex);
     UnloadTexture(speech_tex);
     UnloadTexture(character_tex);

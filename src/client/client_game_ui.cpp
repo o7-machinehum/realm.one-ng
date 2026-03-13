@@ -41,7 +41,9 @@ void drawChatInputOverlay(Font ui_font,
                           float text_offset_y,
                           float font_size,
                           const std::string& input,
-                          bool active) {
+                          bool active,
+                          float alpha) {
+    const auto a = static_cast<unsigned char>(255.0f * alpha);
     const float input_y = static_cast<float>(play_y + play_h) - overlay_height - overlay_margin;
     const Rectangle chat_input_rect{
         static_cast<float>(play_x) + overlay_margin,
@@ -49,7 +51,10 @@ void drawChatInputOverlay(Font ui_font,
         static_cast<float>(play_w) - (overlay_margin * 2.0f),
         overlay_height
     };
-    drawUiPanel(chat_input_rect, Color{0, 0, 0, 150}, Color{90, 90, 90, 220}, 1.0f);
+    drawUiPanel(chat_input_rect,
+                Color{0, 0, 0, static_cast<unsigned char>(150.0f * alpha)},
+                Color{90, 90, 90, a},
+                1.0f);
     if (active) SetMouseCursor(MOUSE_CURSOR_IBEAM);
     const std::string prefix = active ? "> " : "[Enter] Chat: ";
     drawUiTextInputLine(ui_font,
@@ -59,8 +64,8 @@ void drawChatInputOverlay(Font ui_font,
                         font_size,
                         prefix,
                         active,
-                        YELLOW,
-                        LIGHTGRAY);
+                        Color{YELLOW.r, YELLOW.g, YELLOW.b, a},
+                        Color{LIGHTGRAY.r, LIGHTGRAY.g, LIGHTGRAY.b, a});
 }
 
 } // namespace client

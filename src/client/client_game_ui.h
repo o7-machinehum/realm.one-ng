@@ -32,6 +32,7 @@ void drawChatInputOverlay(Font ui_font,
                           float text_offset_y,
                           float font_size,
                           const std::string& input,
-                          bool active);
+                          bool active,
+                          float alpha = 1.0f);
 
 } // namespace client

@@ -3,21 +3,21 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "art/overworld.tsx",
+    "activeFile": "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
     "expandedProjectPaths": [
-        "/home/machinehum/the_island/data/worlds/501_501/rooms",
-        ".",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms",
-        "art",
         "/home/machinehum/the_island/data/worlds/500_501",
-        "/home/machinehum/the_island/data/worlds/500_500",
-        "/home/machinehum/the_island/data/worlds/501_500",
         "/home/machinehum/the_island/data/rooms",
         "/home/machinehum/the_island/data/worlds/501_500/rooms",
-        "/home/machinehum/the_island/data/worlds/500_501/rooms",
+        "/home/machinehum/the_island/data/worlds/500_500/rooms",
         "/home/machinehum/the_island/data/worlds/501_501",
+        "art",
+        ".",
+        "/home/machinehum/the_island/data/worlds/500_501/rooms",
+        "/home/machinehum/the_island/data/worlds",
+        "/home/machinehum/the_island/data/worlds/501_500",
         "/home/machinehum/the_island/data/worlds/realm_one",
-        "/home/machinehum/the_island/data/worlds"
+        "/home/machinehum/the_island/data/worlds/500_500",
+        "/home/machinehum/the_island/data/worlds/501_501/rooms"
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
@@ -95,22 +95,22 @@
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 1.5,
-            "selectedLayer": 1,
+            "scale": 2,
+            "selectedLayer": 14,
             "viewCenter": {
-                "x": 222.33333333333334,
-                "y": 159.99999999999997
+                "x": 349,
+                "y": 166.5
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx": {
             "expandedObjectLayers": [
                 14
             ],
-            "scale": 5.5,
-            "selectedLayer": 15,
+            "scale": 3,
+            "selectedLayer": 14,
             "viewCenter": {
-                "x": 164,
-                "y": 156
+                "x": 202.16666666666666,
+                "y": 159.99999999999997
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx": {
@@ -120,8 +120,8 @@
             "scale": 5.5,
             "selectedLayer": 14,
             "viewCenter": {
-                "x": 195.45454545454547,
-                "y": -496.3636363636364
+                "x": 240,
+                "y": 160
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/p1.tmx": {
@@ -152,8 +152,8 @@
             "scale": 3,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": -148.33333333333331,
-                "y": 482
+                "x": 438.3333333333333,
+                "y": 1212.6666666666665
             }
         },
         "/home/machinehum/the_island/data/worlds/game/assets/art/cave.tsx": {
@@ -192,6 +192,10 @@
                 "y": 96.34729840121366
             }
         },
+        "art/boats.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 4
+        },
         "art/cave.tsx": {
             "dynamicWrapping": false,
             "scaleInDock": 3,
@@ -227,8 +231,8 @@
             "scaleInEditor": 4
         },
         "art/objects.tsx": {
-            "scaleInDock": 1,
-            "scaleInEditor": 3
+            "scaleInDock": 2,
+            "scaleInEditor": 4
         },
         "art/old_man.tsx": {
             "scaleInDock": 3,
@@ -248,7 +252,7 @@
         },
         "art/speech.tsx": {
             "scaleInDock": 1,
-            "scaleInEditor": 5.5
+            "scaleInEditor": 4
         },
         "art/tiny16.tsx": {
             "scaleInDock": 2,
@@ -272,24 +276,25 @@
         "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
-        "art/overworld.tsx",
-        "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx"
+        "art/objects.tsx",
+        "art/speech.tsx",
+        "art/boats.tsx"
     ],
     "project": "main.tiled-project",
     "property.type": "portal",
     "recentFiles": [
-        "art/old_man.tsx",
-        "art/properties.tsx",
-        "art/slime.tsx",
-        "art/speech.tsx",
-        "/home/machinehum/the_island/data/worlds/500_501/rooms/0.tmx",
-        "art/overworld.tsx",
         "art/tiny16.tsx",
         "art/npc_test.tsx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx",
         "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx"
+        "art/boats.tsx",
+        "art/speech.tsx",
+        "art/objects.tsx",
+        "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
+        "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
+        "art/old_man.tsx",
+        "art/properties.tsx"
     ],
     "tileset.lastUsedFormat": "tsx",
     "tileset.tileSize": {

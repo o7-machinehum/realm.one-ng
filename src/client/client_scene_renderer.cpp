@@ -386,14 +386,10 @@ void drawScene(const Room& room,
 
     const float map_ox = cfg.map_origin_x;
     const float map_oy = cfg.map_origin_y;
-    const float map_vw = cfg.map_view_width > 0.0f ? cfg.map_view_width : (cfg.inventory_visible ? (GetScreenWidth() - cfg.inventory_panel_width) : static_cast<float>(GetScreenWidth()));
-    const float map_vh = cfg.map_view_height > 0.0f ? cfg.map_view_height : (GetScreenHeight() - cfg.bottom_panel_height);
+    const float map_vw = cfg.map_view_width > 0.0f ? cfg.map_view_width : static_cast<float>(GetScreenWidth());
+    const float map_vh = cfg.map_view_height > 0.0f ? cfg.map_view_height : static_cast<float>(GetScreenHeight());
     const Vector2 mouse = GetMousePosition();
     const Vector2 mouse_local{mouse.x - map_ox, mouse.y - map_oy};
-    const bool has_inventory_drop_rect = cfg.inventory_drop_rect.width > 0.0f && cfg.inventory_drop_rect.height > 0.0f;
-    const bool mouse_in_inventory = cfg.inventory_visible &&
-                                    has_inventory_drop_rect &&
-                                    CheckCollisionPointRec(mouse, cfg.inventory_drop_rect);
     const bool mouse_in_map = mouse.x >= map_ox &&
                               mouse.y >= map_oy &&
                               mouse.x < (map_ox + map_vw) &&
@@ -408,13 +404,13 @@ void drawScene(const Room& room,
             const int tx = static_cast<int>(std::floor(mouse_local.x / tile_w));
             const int ty = static_cast<int>(std::floor(mouse_local.y / tile_h));
             out.move_ground_item = MoveGroundItemMsg{scene_state.dragging_ground_item_id, tx, ty};
-        } else if (mouse_in_inventory) {
+        } else {
             out.pickup_ground_item = PickupMsg{scene_state.dragging_ground_item_id};
         }
         scene_state.dragging_ground_item_id = -1;
     }
     if (scene_state.dragging_ground_item_id >= 0 || hovered_item_id >= 0) {
-        SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+        SetMouseCursor(MOUSE_CURSOR_CROSSHAIR);
     } else {
         SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     }

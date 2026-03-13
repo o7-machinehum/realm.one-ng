@@ -296,10 +296,22 @@ void handleInventorySwapMessage(ServerState& state, ENetPeer* peer, const Envelo
     if (!player.authenticated) return;
 
     InventorySwapMsg m = fromBytes<InventorySwapMsg>(env.payload.data(), env.payload.size());
-    const int n = static_cast<int>(player.data.inventory.size());
+    const int max_idx = std::max(m.from_index, m.to_index);
     if (m.from_index >= 0 && m.to_index >= 0 &&
-        m.from_index < n && m.to_index < n &&
-        m.from_index != m.to_index) {
+        max_idx < kInventoryLimit &&
+        m.from_index != m.to_index &&
+        m.from_index < static_cast<int>(player.data.inventory.size())) {
+        // Resize inventory to accommodate target slot (empty slots are empty strings)
+        if (max_idx >= static_cast<int>(player.data.inventory.size())) {
+            player.data.inventory.resize(max_idx + 1);
+        }
+        // Auto-unequip if source item is currently equipped (drag from equipment)
+        for (auto it = player.data.equipment_by_type.begin(); it != player.data.equipment_by_type.end(); ++it) {
+            if (it->second == m.from_index) {
+                player.data.equipment_by_type.erase(it);
+                break;
+            }
+        }
         std::swap(player.data.inventory[m.from_index], player.data.inventory[m.to_index]);
         onInventorySwap(player, m.from_index, m.to_index);
         persistPlayer(player, *state.auth_db);
