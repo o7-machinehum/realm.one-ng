@@ -41,7 +41,7 @@ bool tryMoveMonster(const ServerState& state, MonsterRuntime& mon,
 TickResult advanceServerTick(ServerState& state, int tick_ms) {
     TickResult result;
 
-    // ---- Section: Update player vitals ----
+    // ---- Update player vitals ----
     for (auto& [_, p] : state.players) {
         if (!p.authenticated) continue;
         const int before_max = p.max_hp;
@@ -50,12 +50,12 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         if (p.max_hp != before_max || p.hp != before_hp) result.state_changed = true;
     }
 
-    // ---- Section: Player-vs-monster melee combat ----
+    // ---- Player-vs-monster melee combat ----
     for (auto& [_, p] : state.players) {
         combat(state, p, result);
     }
 
-    // ---- Section: Monster AI movement (chase + wander) ----
+    // ---- Monster AI movement (chase + wander) ----
     for (auto& mon : state.monsters) {
         if (mon.hp <= 0) continue;
         mon.move_accum_ms += tick_ms;
@@ -114,7 +114,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }
     }
 
-    // ---- Section: NPC wandering ----
+    // ---- NPC wandering ----
     for (auto& npc : state.npcs) {
         if (npc.talk_pause_ms > 0) {
             npc.talk_pause_ms = std::max(0, npc.talk_pause_ms - tick_ms);
@@ -149,7 +149,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }
     }
 
-    // ---- Section: Monster-vs-player melee combat ----
+    // ---- Monster-vs-player melee combat ----
     for (auto& mon : state.monsters) {
         if (mon.hp <= 0) continue;
 
@@ -224,7 +224,7 @@ TickResult advanceServerTick(ServerState& state, int tick_ms) {
         }
     }
 
-    // ---- Section: Monster respawn management ----
+    // ---- Monster respawn management ----
     for (size_t i = 0; i < state.pending_respawns.size();) {
         auto& entry = state.pending_respawns[i];
         entry.remaining_ms -= tick_ms;
