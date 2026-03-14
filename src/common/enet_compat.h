@@ -20,4 +20,6 @@
     #undef NOGDI
     #undef CloseWindow
     #undef ShowCursor
+    #undef DrawText
+    #undef LoadImage
 #endif
