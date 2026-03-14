@@ -326,13 +326,11 @@ void handleSetEquipmentMessage(ServerState& state, ENetPeer* peer, const Envelop
     if (!player.authenticated) return;
 
     SetEquipmentMsg m = fromBytes<SetEquipmentMsg>(env.payload.data(), env.payload.size());
-    const std::string equip_type = canonicalEquipType(m.equip_type);
-    if (equip_type.empty()) return;
 
     if (m.inventory_index < 0) {
-        player.data.equipment_by_type.erase(equip_type);
+        player.data.equipment_by_type.erase(m.equip_type);
         persistPlayer(player, *state.auth_db);
-        broadcastGameState(state, player.data.username + " unequipped " + equip_type);
+        broadcastGameState(state, player.data.username + " unequipped");
         return;
     }
 
@@ -340,10 +338,8 @@ void handleSetEquipmentMessage(ServerState& state, ENetPeer* peer, const Envelop
     const std::string& inv_item_name = player.data.inventory[m.inventory_index];
     auto it = state.item_defs_by_id.find(normalizeId(inv_item_name));
     if (it == state.item_defs_by_id.end()) return;
-    const std::string item_type = canonicalEquipType(it->second->item_type);
-    if (item_type.empty() || item_type != equip_type) return;
 
-    player.data.equipment_by_type[equip_type] = m.inventory_index;
+    player.data.equipment_by_type[m.equip_type] = m.inventory_index;
     persistPlayer(player, *state.auth_db);
     broadcastGameState(state, player.data.username + " equipped " + inv_item_name);
 }

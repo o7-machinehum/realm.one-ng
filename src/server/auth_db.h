@@ -1,10 +1,11 @@
 #pragma once
 
+#include "item_defs.h"
 #include "tile_pos.h"
 
+#include <map>
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 struct sqlite3;
 
@@ -20,7 +21,7 @@ struct PersistedPlayer {
     int shielding_xp = 0;
     int evasion_xp = 0;
     std::vector<std::string> inventory;
-    std::unordered_map<std::string, int> equipment_by_type; // equip_type -> inventory slot index
+    std::map<ItemType, int> equipment_by_type;
 };
 
 // SQLite-backed player authentication and persistence.

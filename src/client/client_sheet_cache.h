@@ -1,5 +1,6 @@
 #pragma once
 
+#include "item_defs.h"
 #include "msg.h"
 #include "monster_defs.h"
 #include "sprites.h"
@@ -21,7 +22,7 @@ struct ItemUiDef {
     std::string id;
     std::string name;
     std::string sprite_tileset;
-    std::string equip_type;
+    ItemType item_type = ItemType::Weapon;
 };
 
 // Produces a lowercase, trimmed key for id lookups.

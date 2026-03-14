@@ -62,20 +62,20 @@ std::vector<std::string> splitInventory(const std::string& s) {
     return out;
 }
 
-std::string joinEquipment(const std::unordered_map<std::string, int>& m) {
+std::string joinEquipment(const std::map<ItemType, int>& m) {
     std::ostringstream oss;
     bool first = true;
     for (const auto& [k, idx] : m) {
-        if (k.empty() || idx < 0) continue;
+        if (idx < 0) continue;
         if (!first) oss << "|";
         first = false;
-        oss << k << "=" << idx;
+        oss << static_cast<int>(k) << "=" << idx;
     }
     return oss.str();
 }
 
-std::unordered_map<std::string, int> splitEquipment(const std::string& s) {
-    std::unordered_map<std::string, int> out;
+std::map<ItemType, int> splitEquipment(const std::string& s) {
+    std::map<ItemType, int> out;
     if (s.empty()) return out;
     std::string token;
     std::istringstream iss(s);
@@ -87,7 +87,7 @@ std::unordered_map<std::string, int> splitEquipment(const std::string& s) {
         const std::string v = token.substr(eq + 1);
         if (k.empty() || v.empty()) continue;
         try {
-            out[k] = std::stoi(v);
+            out[static_cast<ItemType>(std::stoi(k))] = std::stoi(v);
         } catch (...) {}
     }
     return out;

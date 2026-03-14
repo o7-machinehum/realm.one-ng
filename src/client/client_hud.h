@@ -23,8 +23,9 @@ inline float widgetScale(float screen_h) {
 }
 
 // Fixed equipment slot order
-inline const char* kEquipSlotTypes[kEquipSlotCount] = {
-    "Armor", "Weapon", "Ring", "Legs", "Boots", "Helmet", "Necklace", "Shield"
+inline const ItemType kEquipSlotTypes[kEquipSlotCount] = {
+    ItemType::Armor, ItemType::Weapon, ItemType::Ring, ItemType::Legs,
+    ItemType::Boots, ItemType::Helmet, ItemType::Necklace, ItemType::Shield
 };
 
 struct HudState {
@@ -57,7 +58,7 @@ void drawHud(Font ui_font,
              float bottom_margin,
              float dt,
              const std::function<bool(const std::string&, const Rectangle&, Color)>& draw_item_icon,
-             const std::function<std::string(const std::string&)>& resolve_item_equip_type,
+             const std::function<std::optional<ItemType>(const std::string&)>& resolve_item_equip_type,
              HudOutput& out);
 
 } // namespace client

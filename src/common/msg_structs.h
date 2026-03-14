@@ -1,6 +1,8 @@
 // Action messages sent from client to server (player intents).
 #pragma once
 
+#include "item_defs.h"
+
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/string.hpp>
 #include <cereal/types/vector.hpp>
@@ -99,7 +101,7 @@ struct MoveGroundItemMsg {
 };
 
 struct SetEquipmentMsg {
-    std::string equip_type; // Weapon/Armor/Shield/Legs/Boots/Helmet
+    ItemType equip_type;
     int inventory_index = -1; // -1 means unequip this type
 
     template <class Ar>

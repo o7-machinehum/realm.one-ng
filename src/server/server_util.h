@@ -7,6 +7,7 @@
 #include "msg.h"
 #include "envelope.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -45,11 +46,8 @@ void sendRoomToPeer(ENetPeer* peer, const World& world, const std::string& room_
 
 // Builds a list of equipment messages from the player's equipment map and inventory.
 [[nodiscard]] std::vector<EquippedItemMsg> buildEquipmentMsgList(
-    const std::unordered_map<std::string, int>& eq,
+    const std::map<ItemType, int>& eq,
     const std::vector<std::string>& inventory);
-
-// Normalizes a raw equipment type string to its canonical form (e.g. "weapon" -> "Weapon").
-[[nodiscard]] std::string canonicalEquipType(const std::string& raw);
 
 // ---- Progression ----
 struct LevelInfo {

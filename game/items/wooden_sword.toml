@@ -2,6 +2,7 @@ name = "Wooden Sword"
 sprite_tileset = "materials2.tsx"
 stackable = false
 item_type = "Weapon"
+item_subtype = "Sword"
 
 attack = 1
 shielding = 2

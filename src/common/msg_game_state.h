@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "item_defs.h"
+
 struct LoginResultMsg {
     bool ok = false;
     std::string message;
@@ -23,7 +25,7 @@ struct LoginResultMsg {
 };
 
 struct EquippedItemMsg {
-    std::string equip_type;
+    ItemType equip_type;
     int inventory_index = -1;
     std::string item_name;
 

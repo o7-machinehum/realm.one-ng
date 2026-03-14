@@ -547,10 +547,10 @@ int main(int argc, char** argv) {
             DrawTexturePro(it->second.tex, src, dst, Vector2{0, 0}, 0.0f, tint);
             return true;
         };
-        const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::string {
+        const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::optional<ItemType> {
             auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
-            if (dit == item_defs_by_key.end()) return {};
-            return dit->second.equip_type;
+            if (dit == item_defs_by_key.end()) return std::nullopt;
+            return dit->second.item_type;
         };
 
         const float chat_area_h = kInputOverlayHeight + kInputOverlayMargin;

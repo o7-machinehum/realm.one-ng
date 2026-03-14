@@ -35,6 +35,22 @@ std::string parseStringValue(const std::string& raw) {
     return v;
 }
 
+ItemSubType stringToItemSubType(const std::string& raw) {
+    if(raw == "Sword")
+        return ItemSubType::Sword;
+
+    std::cerr << "ERROR with ItemSubType: " << raw << "\n";
+    return ItemSubType::None;
+}
+
+ItemType parseItemType(const std::string& raw) {
+    const ItemType t = stringToItemType(raw);
+    if (raw != "Weapon" && t == ItemType::Weapon) {
+        std::cerr << "ERROR with ItemType: " << raw << "\n";
+    }
+    return t;
+}
+
 bool parseBool(const std::string& raw, bool& out) {
     std::string v = parseStringValue(raw);
     std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
@@ -84,10 +100,17 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
         if (key.empty() || raw_val.empty()) continue;
 
         if (key == "name") out.name = parseStringValue(raw_val);
-        else if (key == "sprite_tileset") out.sprite_tileset = parseStringValue(raw_val);
-        else if (key == "item_type" || key == "equip_type" || key == "type" || key == "slot") out.item_type = parseStringValue(raw_val);
-        else if (key == "attack" || key == "offense" || key == "offence") { int v = out.attack; if (parseInt(raw_val, v)) out.attack = v; }
-        else if (key == "defense" || key == "defence" || key == "armor" || key == "armour" || key == "shielding") {
+        else if (key == "sprite_tileset") {
+            out.sprite_tileset = parseStringValue(raw_val);
+        }
+        else if (key == "item_type") {
+            out.item_type = parseItemType(raw_val);
+        }
+        else if (key == "item_subtype") {
+            out.item_subtype = stringToItemSubType(raw_val);
+        }
+        else if (key == "attack") { int v = out.attack; if (parseInt(raw_val, v)) out.attack = v; }
+        else if (key == "defense") {
             int v = out.defense;
             if (parseInt(raw_val, v)) out.defense = v;
         }

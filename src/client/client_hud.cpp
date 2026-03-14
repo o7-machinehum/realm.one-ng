@@ -1,5 +1,6 @@
 #include "client_hud.h"
 #include "client_game_ui.h"
+#include "item_defs.h"
 
 #include <algorithm>
 #include <string>
@@ -10,24 +11,9 @@ namespace {
 
 constexpr float kFadeSpeed = 6.0f;    // alpha units per second
 
-std::string canonicalEquipType(std::string t) {
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    if (t == "weapon") return "Weapon";
-    if (t == "armor") return "Armor";
-    if (t == "shield") return "Shield";
-    if (t == "legs") return "Legs";
-    if (t == "boots") return "Boots";
-    if (t == "helmet") return "Helmet";
-    if (t == "ring") return "Ring";
-    if (t == "necklace") return "Necklace";
-    return {};
-}
-
-int findEquipmentIndex(const GameStateMsg& gs, const std::string& equip_type) {
+int findEquipmentIndex(const GameStateMsg& gs, const ItemType& equip_type) {
     for (const auto& eq : gs.your_equipment) {
-        if (canonicalEquipType(eq.equip_type) == equip_type) {
+        if (eq.equip_type == equip_type) {
             return eq.inventory_index;
         }
     }
@@ -41,13 +27,13 @@ bool isEquippedIndex(const GameStateMsg& gs, int inv_idx) {
     return false;
 }
 
-std::string equippedTypeForIndex(const GameStateMsg& gs, int inv_idx) {
+std::optional<ItemType> equippedTypeForIndex(const GameStateMsg& gs, int inv_idx) {
     for (const auto& eq : gs.your_equipment) {
         if (eq.inventory_index == inv_idx) {
-            return canonicalEquipType(eq.equip_type);
+            return eq.equip_type;
         }
     }
-    return {};
+    return std::nullopt;
 }
 
 } // namespace
@@ -66,7 +52,7 @@ void drawHud(Font ui_font,
              float bottom_margin,
              float dt,
              const std::function<bool(const std::string&, const Rectangle&, Color)>& draw_item_icon,
-             const std::function<std::string(const std::string&)>& resolve_item_equip_type,
+             const std::function<std::optional<ItemType>(const std::string&)>& resolve_item_equip_type,
              HudOutput& out) {
     out.swap_msg.reset();
     out.drop_msg.reset();
@@ -192,7 +178,7 @@ void drawHud(Font ui_font,
             const int inv_idx = findEquipmentIndex(game_state, kEquipSlotTypes[eq_slot]);
             if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
                 && !game_state.inventory[inv_idx].empty()) {
-                out.set_equipment_msg = SetEquipmentMsg{std::string(kEquipSlotTypes[eq_slot]), -1};
+                out.set_equipment_msg = SetEquipmentMsg{kEquipSlotTypes[eq_slot], -1};
             }
         }
     }
@@ -206,10 +192,11 @@ void drawHud(Font ui_font,
             if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
                 && !game_state.inventory[inv_idx].empty()
                 && !isEquippedIndex(game_state, inv_idx)) {
-                const std::string type = canonicalEquipType(
-                    resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[inv_idx]) : std::string{});
-                if (!type.empty()) {
-                    out.set_equipment_msg = SetEquipmentMsg{type, inv_idx};
+                const std::optional<ItemType> type = resolve_item_equip_type
+                    ? resolve_item_equip_type(game_state.inventory[inv_idx])
+                    : std::optional<ItemType>{};
+                if (type.has_value()) {
+                    out.set_equipment_msg = SetEquipmentMsg{*type, inv_idx};
                 }
             }
         }
@@ -219,19 +206,20 @@ void drawHud(Font ui_font,
     if (state.drag.active && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         const Vector2 m = GetMousePosition();
 
-        const std::string from_equip = equippedTypeForIndex(game_state, state.drag.from_index);
-        const bool was_equipped = !from_equip.empty();
+        const auto from_equip = equippedTypeForIndex(game_state, state.drag.from_index);
+        const bool was_equipped = from_equip.has_value();
 
         const int eq_slot = findEquipSlotAt(m);
         const int hb_slot = findHotbarSlotAt(m);
 
         if (eq_slot >= 0 && !was_equipped) {
             // Drag TO equipment slot — equip if item type matches
-            const std::string item_type = canonicalEquipType(
-                resolve_item_equip_type ? resolve_item_equip_type(state.drag.item) : std::string{});
-            const std::string slot_type = kEquipSlotTypes[eq_slot];
-            if (item_type == slot_type) {
-                out.set_equipment_msg = SetEquipmentMsg{item_type, state.drag.from_index};
+            const std::optional<ItemType> item_type = resolve_item_equip_type
+                ? resolve_item_equip_type(state.drag.item)
+                : std::optional<ItemType>{};
+            const ItemType slot_type = kEquipSlotTypes[eq_slot];
+            if (item_type.has_value() && *item_type == slot_type) {
+                out.set_equipment_msg = SetEquipmentMsg{*item_type, state.drag.from_index};
             }
         } else if (hb_slot >= 0) {
             // Drag to hotbar slot — server auto-unequips if source is equipped
@@ -242,7 +230,7 @@ void drawHud(Font ui_font,
         } else if (!CheckCollisionPointRec(m, hud_rect)) {
             // Outside HUD
             if (was_equipped) {
-                out.set_equipment_msg = SetEquipmentMsg{from_equip, -1};
+                out.set_equipment_msg = SetEquipmentMsg{*from_equip, -1};
             } else {
                 out.drop_msg = DropMsg{state.drag.from_index};
             }
@@ -263,7 +251,7 @@ void drawHud(Font ui_font,
 
     // Equipment item icons
     for (int i = 0; i < kEquipSlotCount; ++i) {
-        const std::string equip_type = kEquipSlotTypes[i];
+        const ItemType equip_type = kEquipSlotTypes[i];
         const int inv_idx = findEquipmentIndex(game_state, equip_type);
         const bool has_item = inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
                               && !game_state.inventory[inv_idx].empty();

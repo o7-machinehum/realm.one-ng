@@ -16,25 +16,6 @@ constexpr Color kSlotBg{37, 42, 48, 230};
 constexpr Color kSlotBorder{90, 102, 117, 255};
 constexpr Color kSectionTitle{220, 225, 235, 255};
 
-std::string canonicalEquipType(std::string t) {
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    if (t == "weapon") return "Weapon";
-    if (t == "armor") return "Armor";
-    if (t == "shield") return "Shield";
-    if (t == "legs") return "Legs";
-    if (t == "boots") return "Boots";
-    if (t == "helmet") return "Helmet";
-    if (t == "ring") return "Ring";
-    if (t == "necklace") return "Necklace";
-    return {};
-}
-
-bool isEquipType(const std::string& raw) {
-    return !canonicalEquipType(raw).empty();
-}
-
 bool isEquippedIndex(const GameStateMsg& gs, int inv_idx) {
     for (const auto& eq : gs.your_equipment) {
         if (eq.inventory_index == inv_idx) return true;
@@ -57,7 +38,7 @@ void drawInventoryOverlay(Font ui_font,
                           InventoryOverlayState& state,
                           DragState& drag,
                           const std::function<bool(const std::string&, const Rectangle&, Color)>& draw_item_icon,
-                          const std::function<std::string(const std::string&)>& resolve_item_equip_type,
+                          const std::function<std::optional<ItemType>(const std::string&)>& resolve_item_equip_type,
                           InventoryOverlayOutput& out) {
     out.swap_msg.reset();
     out.drop_msg.reset();
@@ -152,9 +133,11 @@ void drawInventoryOverlay(Font ui_font,
         if (slot >= 0) {
             const int inv_idx = bpToInv(slot);
             if (hasItemAt(inv_idx)) {
-                const std::string type = canonicalEquipType(resolve_item_equip_type ? resolve_item_equip_type(game_state.inventory[inv_idx]) : std::string{});
-                if (isEquipType(type)) {
-                    out.set_equipment_msg = SetEquipmentMsg{type, inv_idx};
+                const std::optional<ItemType> type = resolve_item_equip_type
+                    ? resolve_item_equip_type(game_state.inventory[inv_idx])
+                    : std::optional<ItemType>{};
+                if (type.has_value()) {
+                    out.set_equipment_msg = SetEquipmentMsg{*type, inv_idx};
                 }
             }
         }

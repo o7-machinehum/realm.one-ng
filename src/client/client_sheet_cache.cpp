@@ -83,7 +83,7 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
             if (key == "name") def.name = parseTomlString(value);
             else if (key == "sprite_tileset") def.sprite_tileset = parseTomlString(value);
             else if (key == "equip_type" || key == "item_type" || key == "type" || key == "slot") {
-                def.equip_type = parseTomlString(value);
+                def.item_type = stringToItemType(parseTomlString(value));
             }
         }
 

@@ -6,28 +6,6 @@
 
 namespace client {
 
-namespace {
-std::string canonicalEquipType(std::string t) {
-    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    if (t == "weapon") return "Weapon";
-    if (t == "armor") return "Armor";
-    if (t == "shield") return "Shield";
-    if (t == "legs") return "Legs";
-    if (t == "boots") return "Boots";
-    if (t == "helmet") return "Helmet";
-    if (t == "ring") return "Ring";
-    if (t == "necklace") return "Necklace";
-    return {};
-}
-
-bool isEquipType(const std::string& raw) {
-    return !canonicalEquipType(raw).empty();
-}
-
-} // namespace
-
 // Draws the inventory grid/body and emits drag/swap/drop/equip interactions.
 void drawInventoryUi(Font ui_font,
                      const GameStateMsg& game_state,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client_support.h"
+#include "item_defs.h"
 #include "msg.h"
 #include "raylib.h"
 
@@ -39,7 +40,7 @@ void drawInventoryOverlay(Font ui_font,
                           InventoryOverlayState& state,
                           DragState& drag,
                           const std::function<bool(const std::string&, const Rectangle&, Color)>& draw_item_icon,
-                          const std::function<std::string(const std::string&)>& resolve_item_equip_type,
+                          const std::function<std::optional<ItemType>(const std::string&)>& resolve_item_equip_type,
                           InventoryOverlayOutput& out);
 
 } // namespace client

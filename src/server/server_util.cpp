@@ -50,32 +50,18 @@ std::string makeCorpseItemId(const std::string& monster_id) {
 // ---- Equipment ----
 
 std::vector<EquippedItemMsg> buildEquipmentMsgList(
-    const std::unordered_map<std::string, int>& eq,
+    const std::map<ItemType, int>& eq,
     const std::vector<std::string>& inventory) {
     std::vector<EquippedItemMsg> out;
     out.reserve(eq.size());
     for (const auto& [t, idx] : eq) {
-        if (t.empty() || idx < 0 || idx >= static_cast<int>(inventory.size())) continue;
+        if (idx < 0 || idx >= static_cast<int>(inventory.size())) continue;
         out.push_back(EquippedItemMsg{t, idx, inventory[static_cast<size_t>(idx)]});
     }
     return out;
 }
 
-std::string canonicalEquipType(const std::string& raw) {
-    const std::string n = normalizeId(raw);
-    if (n == "weapon") return "Weapon";
-    if (n == "armor")  return "Armor";
-    if (n == "shield") return "Shield";
-    if (n == "legs")   return "Legs";
-    if (n == "boots")    return "Boots";
-    if (n == "helmet")   return "Helmet";
-    if (n == "ring")     return "Ring";
-    if (n == "necklace") return "Necklace";
-    return {};
-}
-
 // ---- Progression ----
-
 int computeExpForLevel(const ProgressionSettings& p, int level) {
     const int l = std::max(1, level);
     const int need = p.exp_per_level_a * l * l + p.exp_per_level_b * l + p.exp_per_level_c;
@@ -102,6 +88,7 @@ LevelInfo computeLevelFromXp(const ProgressionSettings& p, int xp_total) {
     info.xp_to_next = computeExpForLevel(p, level);
     return info;
 }
+
 
 void updatePlayerVitalsFromLevel(PlayerRuntime& p, const ServerState& state) {
     const int lvl = computeLevelFromXp(state.settings.progression, p.data.exp).level;
