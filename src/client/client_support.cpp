@@ -29,7 +29,7 @@ bool tryParsePickup(const std::string& input, PickupMsg& out) {
 bool tryParseDrop(const std::string& input, DropMsg& out) {
     std::istringstream iss(input);
     std::string cmd;
-    iss >> cmd >> out.inventory_index;
+    iss >> cmd >> out.instance_id;
     out.to_x = -1;
     out.to_y = -1;
     return cmd == "/drop";

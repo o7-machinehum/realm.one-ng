@@ -3,12 +3,15 @@
 #pragma once
 
 #include "combat_types.h"
+#include "item_instance.h"
 #include "server_state.h"
 #include "msg.h"
 #include "envelope.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ---- Networking ----
@@ -42,12 +45,18 @@ void sendRoomToPeer(ENetPeer* peer, const World& world, const std::string& room_
 // Builds a corpse item ID string from a monster definition ID.
 [[nodiscard]] std::string makeCorpseItemId(const std::string& monster_id);
 
+// ---- Item instances ----
+
+// Allocates a new ItemInstance, registers it in state.item_instances, and returns its GID.
+[[nodiscard]] int64_t allocateItemInstance(ServerState& state, const std::string& def_id);
+
 // ---- Equipment ----
 
-// Builds a list of equipment messages from the player's equipment map and inventory.
+// Builds a list of equipment messages from GID-based equipment map.
 [[nodiscard]] std::vector<EquippedItemMsg> buildEquipmentMsgList(
-    const std::map<ItemType, int>& eq,
-    const std::vector<std::string>& inventory);
+    const std::map<ItemType, int64_t>& eq,
+    const std::unordered_map<int64_t, ItemInstance>& instances,
+    const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id);
 
 // ---- Progression ----
 struct LevelInfo {
@@ -66,6 +75,7 @@ struct LevelInfo {
 // Sums a specific stat bonus (via member pointer) across all equipped items.
 [[nodiscard]] int computeEquippedStatBonus(
     const PersistedPlayer& p,
+    const std::unordered_map<int64_t, ItemInstance>& instances,
     const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id,
     int ItemDef::*member_ptr);
 
@@ -97,12 +107,8 @@ void applyCombatHit(MonsterRuntime& m, int value);
 
 // ---- Inventory management ----
 
-// Removes equipment references that point outside the inventory bounds.
+// Removes equipment references whose instance_id is not in the inventory.
 void pruneEquipmentForInventory(PlayerRuntime& p);
-// Adjusts equipment indices after an inventory slot is erased.
-void onInventoryErase(PlayerRuntime& p, int erased_index);
-// Adjusts equipment indices after two inventory slots are swapped.
-void onInventorySwap(PlayerRuntime& p, int a, int b);
 
 // ---- Authentication ----
 

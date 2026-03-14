@@ -134,8 +134,9 @@ void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
                                        const std::unordered_map<std::string, ItemUiDef>& item_defs_by_key,
                                        const std::unordered_map<std::string, MonsterDef>& monster_defs_by_id,
                                        std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
-    for (const auto& inv_item : game_state.inventory) {
-        auto dit = item_defs_by_key.find(normalizeKey(inv_item));
+    for (const auto& inv_slot : game_state.inventory) {
+        if (inv_slot.instance_id <= 0 || inv_slot.def_id.empty()) continue;
+        auto dit = item_defs_by_key.find(normalizeKey(inv_slot.def_id));
         std::string tsx;
         std::string size_key;
         std::pair<int, int> size_val{1, 1};
@@ -145,7 +146,7 @@ void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
             tsx = def.sprite_tileset;
             size_key = normalizeKey(def.id);
         } else {
-            const std::string corpse_id = parseCorpseMonsterId(inv_item);
+            const std::string corpse_id = parseCorpseMonsterId(inv_slot.def_id);
             if (corpse_id.empty()) continue;
             auto mit = monster_defs_by_id.find(corpse_id);
             if (mit == monster_defs_by_id.end()) continue;

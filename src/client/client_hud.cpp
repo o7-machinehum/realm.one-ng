@@ -11,29 +11,33 @@ namespace {
 
 constexpr float kFadeSpeed = 6.0f;    // alpha units per second
 
-int findEquipmentIndex(const GameStateMsg& gs, const ItemType& equip_type) {
+// Find which inventory slot index has the given instance_id equipped for this type
+int findEquippedSlotIndex(const GameStateMsg& gs, const ItemType& equip_type) {
     for (const auto& eq : gs.your_equipment) {
-        if (eq.equip_type == equip_type) {
-            return eq.inventory_index;
+        if (eq.equip_type == equip_type && eq.instance_id > 0) {
+            for (int i = 0; i < static_cast<int>(gs.inventory.size()); ++i) {
+                if (gs.inventory[i].instance_id == eq.instance_id) return i;
+            }
         }
     }
     return -1;
 }
 
-bool isEquippedIndex(const GameStateMsg& gs, int inv_idx) {
+// Find the instance_id equipped for a given type, or 0
+int64_t findEquippedInstanceId(const GameStateMsg& gs, const ItemType& equip_type) {
     for (const auto& eq : gs.your_equipment) {
-        if (eq.inventory_index == inv_idx) return true;
+        if (eq.equip_type == equip_type) return eq.instance_id;
     }
-    return false;
+    return 0;
 }
 
-std::optional<ItemType> equippedTypeForIndex(const GameStateMsg& gs, int inv_idx) {
+// Check if this instance_id is equipped anywhere
+bool isEquippedInstance(const GameStateMsg& gs, int64_t instance_id) {
+    if (instance_id <= 0) return false;
     for (const auto& eq : gs.your_equipment) {
-        if (eq.inventory_index == inv_idx) {
-            return eq.equip_type;
-        }
+        if (eq.instance_id == instance_id) return true;
     }
-    return std::nullopt;
+    return false;
 }
 
 } // namespace
@@ -47,6 +51,8 @@ void drawHud(Font ui_font,
              HudState& state,
              Texture2D hotbar_tex,
              Texture2D equip_tex,
+             const ContainerDef& hotbar_def,
+             const ContainerDef& equip_def,
              int dragging_ground_item_id,
              bool overlay_visible,
              float bottom_margin,
@@ -62,6 +68,9 @@ void drawHud(Font ui_font,
 
     const float screen_w = static_cast<float>(GetScreenWidth());
     const float screen_h = static_cast<float>(GetScreenHeight());
+
+    const int equip_slot_count = static_cast<int>(equip_def.slots.size());
+    const int hotbar_slot_count = static_cast<int>(hotbar_def.slots.size());
 
     // HP/MP bars — top-left corner (always full opacity)
     {
@@ -94,12 +103,10 @@ void drawHud(Font ui_font,
     // Equipment bar position (left side, bottom-aligned)
     const float equip_x = hud_x;
     const float equip_y = hud_y + hud_h - equip_tex_h;
-    const float equip_slot_w = equip_tex_w / kEquipSlotCount;
 
     // Hotbar position (right side, bottom-aligned)
     const float hotbar_x = hud_x + equip_tex_w + kHudSectionGap;
     const float hotbar_y = hud_y + hud_h - hotbar_tex_h;
-    const float hotbar_slot_w = hotbar_tex_w / kHotbarSlots;
 
     // Hover detection — lerp alpha
     const bool hovered = CheckCollisionPointRec(GetMousePosition(), hud_rect)
@@ -116,24 +123,45 @@ void drawHud(Font ui_font,
     const auto icon_alpha = static_cast<unsigned char>(a * 255.0f);
     const Color icon_tint{255, 255, 255, icon_alpha};
 
+    // Helper to compute scaled rect for an equip slot
+    auto equipSlotRect = [&](int i) -> Rectangle {
+        if (i < 0 || i >= equip_slot_count) return {};
+        const auto& s = equip_def.slots[i];
+        return {equip_x + s.x * scale, equip_y + s.y * scale, s.w * scale, s.h * scale};
+    };
+
+    // Helper to compute scaled rect for a hotbar slot
+    auto hotbarSlotRect = [&](int i) -> Rectangle {
+        if (i < 0 || i >= hotbar_slot_count) return {};
+        const auto& s = hotbar_def.slots[i];
+        return {hotbar_x + s.x * scale, hotbar_y + s.y * scale, s.w * scale, s.h * scale};
+    };
+
     // Helper to find which equipment slot the point is in
     auto findEquipSlotAt = [&](const Vector2& p) -> int {
-        const Rectangle equip_rect{equip_x, equip_y, equip_tex_w, equip_tex_h};
-        if (!CheckCollisionPointRec(p, equip_rect)) return -1;
-        const int slot = static_cast<int>((p.x - equip_x) / equip_slot_w);
-        return (slot >= 0 && slot < kEquipSlotCount) ? slot : -1;
+        for (int i = 0; i < equip_slot_count; ++i) {
+            if (CheckCollisionPointRec(p, equipSlotRect(i))) return i;
+        }
+        return -1;
     };
 
     // Helper to find which hotbar slot the point is in
     auto findHotbarSlotAt = [&](const Vector2& p) -> int {
-        const Rectangle hotbar_rect{hotbar_x, hotbar_y, hotbar_tex_w, hotbar_tex_h};
-        if (!CheckCollisionPointRec(p, hotbar_rect)) return -1;
-        const int slot = static_cast<int>((p.x - hotbar_x) / hotbar_slot_w);
-        return (slot >= 0 && slot < kHotbarSlots) ? slot : -1;
+        for (int i = 0; i < hotbar_slot_count; ++i) {
+            if (CheckCollisionPointRec(p, hotbarSlotRect(i))) return i;
+        }
+        return -1;
     };
 
-    // Auto-populate hotbar: slot i → inventory[i]
-    for (int i = 0; i < kHotbarSlots; ++i) {
+    // Get equipment type for a slot from container def
+    auto equipSlotType = [&](int i) -> std::optional<ItemType> {
+        if (i < 0 || i >= equip_slot_count) return std::nullopt;
+        return equip_def.slots[i].type_constraint;
+    };
+
+    // Auto-populate hotbar: slot i -> inventory[i]
+    state.hotbar_slots.resize(hotbar_slot_count, -1);
+    for (int i = 0; i < hotbar_slot_count; ++i) {
         state.hotbar_slots[i] = (i < static_cast<int>(game_state.inventory.size())) ? i : -1;
     }
 
@@ -144,12 +172,17 @@ void drawHud(Font ui_font,
         const Vector2 m = GetMousePosition();
         const int eq_slot = findEquipSlotAt(m);
         if (eq_slot >= 0) {
-            const int inv_idx = findEquipmentIndex(game_state, kEquipSlotTypes[eq_slot]);
-            if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                && !game_state.inventory[inv_idx].empty()) {
-                state.drag.active = true;
-                state.drag.from_index = inv_idx;
-                state.drag.item = game_state.inventory[inv_idx];
+            const auto slot_type = equipSlotType(eq_slot);
+            if (slot_type.has_value()) {
+                const int inv_idx = findEquippedSlotIndex(game_state, *slot_type);
+                if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
+                    && game_state.inventory[inv_idx].instance_id > 0) {
+                    state.drag.active = true;
+                    state.drag.from_index = inv_idx;
+                    state.drag.instance_id = game_state.inventory[inv_idx].instance_id;
+                    state.drag.item = game_state.inventory[inv_idx].display_name;
+                    state.drag.def_id = game_state.inventory[inv_idx].def_id;
+                }
             }
         }
     }
@@ -161,11 +194,13 @@ void drawHud(Font ui_font,
         if (slot >= 0) {
             const int inv_idx = state.hotbar_slots[slot];
             if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                && !game_state.inventory[inv_idx].empty()
-                && !isEquippedIndex(game_state, inv_idx)) {
+                && game_state.inventory[inv_idx].instance_id > 0
+                && !isEquippedInstance(game_state, game_state.inventory[inv_idx].instance_id)) {
                 state.drag.active = true;
                 state.drag.from_index = inv_idx;
-                state.drag.item = game_state.inventory[inv_idx];
+                state.drag.instance_id = game_state.inventory[inv_idx].instance_id;
+                state.drag.item = game_state.inventory[inv_idx].display_name;
+                state.drag.def_id = game_state.inventory[inv_idx].def_id;
             }
         }
     }
@@ -175,10 +210,12 @@ void drawHud(Font ui_font,
         const Vector2 m = GetMousePosition();
         const int eq_slot = findEquipSlotAt(m);
         if (eq_slot >= 0) {
-            const int inv_idx = findEquipmentIndex(game_state, kEquipSlotTypes[eq_slot]);
-            if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                && !game_state.inventory[inv_idx].empty()) {
-                out.set_equipment_msg = SetEquipmentMsg{kEquipSlotTypes[eq_slot], -1};
+            const auto slot_type = equipSlotType(eq_slot);
+            if (slot_type.has_value()) {
+                const int64_t iid = findEquippedInstanceId(game_state, *slot_type);
+                if (iid > 0) {
+                    out.set_equipment_msg = SetEquipmentMsg{*slot_type, 0};
+                }
             }
         }
     }
@@ -190,13 +227,14 @@ void drawHud(Font ui_font,
         if (slot >= 0) {
             const int inv_idx = state.hotbar_slots[slot];
             if (inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                && !game_state.inventory[inv_idx].empty()
-                && !isEquippedIndex(game_state, inv_idx)) {
+                && game_state.inventory[inv_idx].instance_id > 0
+                && !isEquippedInstance(game_state, game_state.inventory[inv_idx].instance_id)) {
+                const auto& slot_data = game_state.inventory[inv_idx];
                 const std::optional<ItemType> type = resolve_item_equip_type
-                    ? resolve_item_equip_type(game_state.inventory[inv_idx])
+                    ? resolve_item_equip_type(slot_data.def_id)
                     : std::optional<ItemType>{};
                 if (type.has_value()) {
-                    out.set_equipment_msg = SetEquipmentMsg{*type, inv_idx};
+                    out.set_equipment_msg = SetEquipmentMsg{*type, slot_data.instance_id};
                 }
             }
         }
@@ -206,8 +244,7 @@ void drawHud(Font ui_font,
     if (state.drag.active && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         const Vector2 m = GetMousePosition();
 
-        const auto from_equip = equippedTypeForIndex(game_state, state.drag.from_index);
-        const bool was_equipped = from_equip.has_value();
+        const bool was_equipped = isEquippedInstance(game_state, state.drag.instance_id);
 
         const int eq_slot = findEquipSlotAt(m);
         const int hb_slot = findHotbarSlotAt(m);
@@ -215,11 +252,11 @@ void drawHud(Font ui_font,
         if (eq_slot >= 0 && !was_equipped) {
             // Drag TO equipment slot — equip if item type matches
             const std::optional<ItemType> item_type = resolve_item_equip_type
-                ? resolve_item_equip_type(state.drag.item)
+                ? resolve_item_equip_type(state.drag.def_id)
                 : std::optional<ItemType>{};
-            const ItemType slot_type = kEquipSlotTypes[eq_slot];
-            if (item_type.has_value() && *item_type == slot_type) {
-                out.set_equipment_msg = SetEquipmentMsg{*item_type, state.drag.from_index};
+            const auto slot_type = equipSlotType(eq_slot);
+            if (item_type.has_value() && slot_type.has_value() && *item_type == *slot_type) {
+                out.set_equipment_msg = SetEquipmentMsg{*item_type, state.drag.instance_id};
             }
         } else if (hb_slot >= 0) {
             // Drag to hotbar slot — server auto-unequips if source is equipped
@@ -230,9 +267,15 @@ void drawHud(Font ui_font,
         } else if (!CheckCollisionPointRec(m, hud_rect)) {
             // Outside HUD
             if (was_equipped) {
-                out.set_equipment_msg = SetEquipmentMsg{*from_equip, -1};
+                // Find the actual equip type for this instance and unequip it
+                for (const auto& eq : game_state.your_equipment) {
+                    if (eq.instance_id == state.drag.instance_id) {
+                        out.set_equipment_msg = SetEquipmentMsg{eq.equip_type, 0};
+                        break;
+                    }
+                }
             } else {
-                out.drop_msg = DropMsg{state.drag.from_index};
+                out.drop_msg = DropMsg{state.drag.instance_id};
             }
         }
         // else: on HUD background — cancel
@@ -250,18 +293,19 @@ void drawHud(Font ui_font,
     }
 
     // Equipment item icons
-    for (int i = 0; i < kEquipSlotCount; ++i) {
-        const ItemType equip_type = kEquipSlotTypes[i];
-        const int inv_idx = findEquipmentIndex(game_state, equip_type);
+    for (int i = 0; i < equip_slot_count; ++i) {
+        const auto slot_type = equipSlotType(i);
+        if (!slot_type.has_value()) continue;
+        const int inv_idx = findEquippedSlotIndex(game_state, *slot_type);
         const bool has_item = inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                              && !game_state.inventory[inv_idx].empty();
+                              && game_state.inventory[inv_idx].instance_id > 0;
 
         if (has_item && (!state.drag.active || inv_idx != state.drag.from_index)) {
-            const float sx = equip_x + i * equip_slot_w;
+            const Rectangle sr = equipSlotRect(i);
             const float inset = 2.0f * scale;
-            const Rectangle icon_rect{sx + inset, equip_y + inset,
-                                      equip_slot_w - inset * 2.0f, equip_tex_h - inset * 2.0f};
-            if (draw_item_icon) draw_item_icon(game_state.inventory[inv_idx], icon_rect, icon_tint);
+            const Rectangle icon_rect{sr.x + inset, sr.y + inset,
+                                      sr.width - inset * 2.0f, sr.height - inset * 2.0f};
+            if (draw_item_icon) draw_item_icon(game_state.inventory[inv_idx].def_id, icon_rect, icon_tint);
         }
     }
 
@@ -273,18 +317,18 @@ void drawHud(Font ui_font,
     }
 
     // Hotbar item icons
-    for (int i = 0; i < kHotbarSlots; ++i) {
+    for (int i = 0; i < hotbar_slot_count; ++i) {
         const int inv_idx = state.hotbar_slots[i];
         const bool has_item = inv_idx >= 0 && inv_idx < static_cast<int>(game_state.inventory.size())
-                              && !game_state.inventory[inv_idx].empty()
-                              && !isEquippedIndex(game_state, inv_idx);
+                              && game_state.inventory[inv_idx].instance_id > 0
+                              && !isEquippedInstance(game_state, game_state.inventory[inv_idx].instance_id);
 
         if (has_item && (!state.drag.active || inv_idx != state.drag.from_index)) {
-            const float sx = hotbar_x + i * hotbar_slot_w;
+            const Rectangle sr = hotbarSlotRect(i);
             const float inset = 2.0f * scale;
-            const Rectangle icon_rect{sx + inset, hotbar_y + inset,
-                                      hotbar_slot_w - inset * 2.0f, hotbar_tex_h - inset * 2.0f};
-            if (draw_item_icon) draw_item_icon(game_state.inventory[inv_idx], icon_rect, icon_tint);
+            const Rectangle icon_rect{sr.x + inset, sr.y + inset,
+                                      sr.width - inset * 2.0f, sr.height - inset * 2.0f};
+            if (draw_item_icon) draw_item_icon(game_state.inventory[inv_idx].def_id, icon_rect, icon_tint);
         }
     }
 
@@ -293,7 +337,7 @@ void drawHud(Font ui_font,
         const Vector2 m = GetMousePosition();
         Rectangle ghost{m.x - 22.0f, m.y - 18.0f, 44.0f, 34.0f};
         const Rectangle icon_rect{ghost.x + 6.0f, ghost.y + 4.0f, 60.0f, 48.0f};
-        if (draw_item_icon) draw_item_icon(state.drag.item, icon_rect, WHITE);
+        if (draw_item_icon) draw_item_icon(state.drag.def_id, icon_rect, WHITE);
     }
 
     // Ground item drag-to-HUD pickup

@@ -8,6 +8,7 @@
 #include "client_layout.h"
 #include "client_scene_renderer.h"
 #include "client_sheet_cache.h"
+#include "container_def.h"
 #include "string_util.h"
 #include "ui_settings.h"
 #include "auth_ui.h"
@@ -136,6 +137,17 @@ int main(int argc, char** argv) {
         return 1;
     }
     SetTextureFilter(equip_tex, TEXTURE_FILTER_POINT);
+    Texture2D backpack_tex = LoadTexture("game/assets/art/widgets/backpack.png");
+    if (backpack_tex.id == 0) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/widgets/backpack.png");
+        return 1;
+    }
+    SetTextureFilter(backpack_tex, TEXTURE_FILTER_POINT);
+
+    const auto equip_def = client::loadContainerDef("game/containers/equipment_bar.toml");
+    const auto hotbar_def = client::loadContainerDef("game/containers/hotbar.toml");
+    const auto backpack_def = client::loadContainerDef("game/containers/backpack.toml");
+    const int backpack_index_offset = static_cast<int>(hotbar_def.slots.size());
 
     std::optional<Room> current_room;
     std::optional<GameStateMsg> game_state;
@@ -299,7 +311,9 @@ int main(int argc, char** argv) {
 
             if (IsKeyPressed(KEY_SPACE)) mailbox.push(MsgType::Attack, AttackMsg{game_state->attack_target_monster_id});
             if (IsKeyPressed(KEY_G)) mailbox.push(MsgType::Pickup, PickupMsg{-1});
-            if (IsKeyPressed(KEY_B)) mailbox.push(MsgType::Drop, DropMsg{0});
+            if (IsKeyPressed(KEY_B) && !game_state->inventory.empty() && game_state->inventory[0].instance_id > 0) {
+                mailbox.push(MsgType::Drop, DropMsg{game_state->inventory[0].instance_id});
+            }
         }
 
         // --- Print chat to the screen ---
@@ -509,9 +523,9 @@ int main(int argc, char** argv) {
                                        bubble_cfg);
         }
 
-        // Draw item icon lambda (shared by HUD and overlay)
-        const auto draw_inventory_icon = [&](const std::string& item_name, const Rectangle& icon_rect, Color tint) -> bool {
-            auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
+        // Draw item icon lambda (shared by HUD and overlay) — takes def_id
+        const auto draw_inventory_icon = [&](const std::string& def_id, const Rectangle& icon_rect, Color tint) -> bool {
+            auto dit = item_defs_by_key.find(client::normalizeKey(def_id));
             std::string tsx;
             std::string sprite_name;
             ClipKind kind = ClipKind::Move;
@@ -520,7 +534,7 @@ int main(int argc, char** argv) {
                 tsx = def.sprite_tileset;
                 sprite_name = def.id;
             } else {
-                const std::string corpse_id = parseCorpseMonsterId(item_name);
+                const std::string corpse_id = parseCorpseMonsterId(def_id);
                 if (corpse_id.empty()) return false;
                 auto mit = monster_defs_by_id.find(corpse_id);
                 if (mit == monster_defs_by_id.end()) return false;
@@ -547,8 +561,8 @@ int main(int argc, char** argv) {
             DrawTexturePro(it->second.tex, src, dst, Vector2{0, 0}, 0.0f, tint);
             return true;
         };
-        const auto resolve_item_equip_type = [&](const std::string& item_name) -> std::optional<ItemType> {
-            auto dit = item_defs_by_key.find(client::normalizeKey(item_name));
+        const auto resolve_item_equip_type = [&](const std::string& def_id) -> std::optional<ItemType> {
+            auto dit = item_defs_by_key.find(client::normalizeKey(def_id));
             if (dit == item_defs_by_key.end()) return std::nullopt;
             return dit->second.item_type;
         };
@@ -562,6 +576,9 @@ int main(int argc, char** argv) {
                                          *game_state,
                                          overlay_state,
                                          hud_state.drag,
+                                         backpack_tex,
+                                         backpack_def,
+                                         backpack_index_offset,
                                          draw_inventory_icon,
                                          resolve_item_equip_type,
                                          inv_out);
@@ -582,6 +599,8 @@ int main(int argc, char** argv) {
                             hud_state,
                             hotbar_tex,
                             equip_tex,
+                            hotbar_def,
+                            equip_def,
                             scene_state.dragging_ground_item_id,
                             overlay_state.visible,
                             chat_area_h,
@@ -644,6 +663,7 @@ int main(int argc, char** argv) {
     client::unloadSheetCache(item_sheet_cache);
     UnloadFont(ui_bold_font);
     UnloadFont(ui_font);
+    UnloadTexture(backpack_tex);
     UnloadTexture(equip_tex);
     UnloadTexture(hotbar_tex);
     UnloadTexture(combat_fx_tex);

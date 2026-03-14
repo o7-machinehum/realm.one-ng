@@ -3,7 +3,7 @@
 // ---- Derived player combat stats ----
 int computePlayerOffence(const PlayerRuntime& p, const ServerState& state) {
     const int melee = computeLevelFromXp(state.settings.progression, p.data.melee_xp).level;
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::attack);
+    const int equip = computeEquippedStatBonus(p.data, state.item_instances, state.item_defs_by_id, &ItemDef::attack);
     return std::max(1, melee + equip);
 }
 
@@ -13,17 +13,17 @@ int computePlayerDefence(const PlayerRuntime& p, const ServerState& state) {
 }
 
 int computePlayerArmor(const PlayerRuntime& p, const ServerState& state) {
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::defense);
+    const int equip = computeEquippedStatBonus(p.data, state.item_instances, state.item_defs_by_id, &ItemDef::defense);
     return std::max(0, equip);
 }
 
 int computePlayerEvasion(const PlayerRuntime& p, const ServerState& state) {
     const int skill = computeLevelFromXp(state.settings.progression, p.data.evasion_xp).level;
-    const int equip = computeEquippedStatBonus(p.data, state.item_defs_by_id, &ItemDef::evasion);
+    const int equip = computeEquippedStatBonus(p.data, state.item_instances, state.item_defs_by_id, &ItemDef::evasion);
     return std::max(1, skill + equip);
 }
 
-bool eval_death(ServerState& state, PlayerRuntime p, MonsterRuntime mon, TickResult& result) {
+bool eval_death(ServerState& state, PlayerRuntime& p, MonsterRuntime& mon, TickResult& result) {
     // If the monster is dead
     if (mon.hp <= 0) {
         p.data.exp += mon.exp_reward;
@@ -33,9 +33,11 @@ bool eval_death(ServerState& state, PlayerRuntime p, MonsterRuntime mon, TickRes
         p.attack_target_monster_id = -1;
 
         // Drop corpse item
+        const std::string corpse_def_id = makeCorpseItemId(mon.def_id.empty() ? mon.name : mon.def_id);
         GroundItemRuntime corpse{};
         corpse.id = state.next_item_id++;
-        corpse.item_id = makeCorpseItemId(mon.def_id.empty() ? mon.name : mon.def_id);
+        corpse.instance_id = allocateItemInstance(state, corpse_def_id);
+        corpse.item_id = corpse_def_id;
         corpse.name = mon.name + " corpse";
         corpse.sprite_tileset = mon.sprite_tileset;
         corpse.sprite_name = mon.sprite_name;
@@ -48,8 +50,8 @@ bool eval_death(ServerState& state, PlayerRuntime p, MonsterRuntime mon, TickRes
 
         // Roll loot drops
         for (const auto& drop : mon.drops) {
-            if (drop.item_id.empty()) return true;
-            if (!rollFloatChance(drop.chance)) return true;
+            if (drop.item_id.empty()) continue;
+            if (!rollFloatChance(drop.chance)) continue;
             spawnGroundItem(state, drop.item_id, mon.room, mon.pos);
         }
 
@@ -110,11 +112,9 @@ void melee_combat(ServerState& state, PlayerRuntime& p, MonsterRuntime& mon, Tic
     p.data.melee_xp += 3;
     result.state_changed = true;
     result.event_text = p.data.username + " hit " + mon.name + " for " + std::to_string(dmg);
-
-    eval_death(state, p, mon, result);
 }
 
-void combat(ServerState& state, PlayerRuntime player, TickResult& result) {
+void combat(ServerState& state, PlayerRuntime& player, TickResult& result) {
     // Find which monster the player is attacking
     int hit_index = -1;
     for (size_t i = 0; i < state.monsters.size(); ++i) {

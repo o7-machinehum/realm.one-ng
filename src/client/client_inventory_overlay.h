@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client_support.h"
+#include "container_def.h"
 #include "item_defs.h"
 #include "msg.h"
 #include "raylib.h"
@@ -11,12 +12,6 @@
 
 namespace client {
 
-constexpr int kBackpackSlots = 20;
-constexpr int kBackpackCols = 5;
-constexpr int kBackpackRows = 4;
-constexpr int kBackpackIndexOffset = 8; // backpack slot j → inventory[8+j]
-constexpr float kOverlaySlotSize = 48.0f;
-constexpr float kOverlaySlotGap = 6.0f;
 constexpr float kOverlayFadeDuration = 0.15f;
 
 struct InventoryOverlayState {
@@ -39,6 +34,9 @@ void drawInventoryOverlay(Font ui_font,
                           const GameStateMsg& game_state,
                           InventoryOverlayState& state,
                           DragState& drag,
+                          Texture2D backpack_tex,
+                          const ContainerDef& backpack_def,
+                          int backpack_index_offset,
                           const std::function<bool(const std::string&, const Rectangle&, Color)>& draw_item_icon,
                           const std::function<std::optional<ItemType>(const std::string&)>& resolve_item_equip_type,
                           InventoryOverlayOutput& out);

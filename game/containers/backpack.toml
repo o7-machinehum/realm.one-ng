@@ -1,0 +1,11 @@
+texture = "widgets/backpack.png"
+
+[grid]
+start_x = 22
+start_y = 40
+slot_w = 16
+slot_h = 16
+gap_x = 2
+gap_y = 2
+cols = 5
+rows = 7

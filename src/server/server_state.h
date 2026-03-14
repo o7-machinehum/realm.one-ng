@@ -5,11 +5,13 @@
 #include "server_runtime.h"
 #include "global_settings.h"
 #include "item_defs.h"
+#include "item_instance.h"
 #include "monster_defs.h"
 #include "npc_defs.h"
 
 #include <enet/enet.h>
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -34,6 +36,10 @@ struct ServerState {
     int next_monster_id = 1;
     int next_npc_id = 1;
     int next_item_id = 1;
+    int64_t next_instance_id = 1;
+
+    // ---- Item instances (GID → ItemInstance) ----
+    std::unordered_map<int64_t, ItemInstance> item_instances;
 
     // ---- Loaded definitions (immutable after init) ----
     std::vector<MonsterDef> monster_defs_storage;

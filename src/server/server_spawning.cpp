@@ -1,5 +1,6 @@
 #include "server_spawning.h"
 
+#include "server_util.h"
 #include "string_util.h"
 #include "world.h"
 
@@ -18,6 +19,7 @@ void spawnGroundItem(ServerState& state, const std::string& raw_item_id,
     const ItemDef& def = *dit->second;
     GroundItemRuntime item{};
     item.id = state.next_item_id++;
+    item.instance_id = allocateItemInstance(state, def.id);
     item.item_id = def.id;
     item.name = def.name;
     item.sprite_tileset = def.sprite_tileset;

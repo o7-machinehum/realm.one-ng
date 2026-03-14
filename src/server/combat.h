@@ -21,4 +21,4 @@
 // Computes effective evasion from evasion skill + equipment.
 [[nodiscard]] int computePlayerEvasion(const PlayerRuntime& p, const ServerState& state);
 
-void combat(ServerState& state, PlayerRuntime p, TickResult& result);
+void combat(ServerState& state, PlayerRuntime& player, TickResult& result);

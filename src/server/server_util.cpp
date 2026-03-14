@@ -47,16 +47,35 @@ std::string makeCorpseItemId(const std::string& monster_id) {
     return std::string(kCorpsePrefix) + normalizeId(monster_id);
 }
 
+// ---- Item instances ----
+
+int64_t allocateItemInstance(ServerState& state, const std::string& def_id) {
+    ItemInstance inst;
+    inst.id = state.next_instance_id++;
+    inst.def_id = def_id;
+    state.item_instances[inst.id] = inst;
+    return inst.id;
+}
+
 // ---- Equipment ----
 
 std::vector<EquippedItemMsg> buildEquipmentMsgList(
-    const std::map<ItemType, int>& eq,
-    const std::vector<std::string>& inventory) {
+    const std::map<ItemType, int64_t>& eq,
+    const std::unordered_map<int64_t, ItemInstance>& instances,
+    const std::unordered_map<std::string, const ItemDef*>& item_defs_by_id) {
     std::vector<EquippedItemMsg> out;
     out.reserve(eq.size());
-    for (const auto& [t, idx] : eq) {
-        if (idx < 0 || idx >= static_cast<int>(inventory.size())) continue;
-        out.push_back(EquippedItemMsg{t, idx, inventory[static_cast<size_t>(idx)]});
+    for (const auto& [t, iid] : eq) {
+        if (iid <= 0) continue;
+        auto inst_it = instances.find(iid);
+        if (inst_it == instances.end()) continue;
+        const auto& def_id = inst_it->second.def_id;
+        std::string display_name = def_id;
+        auto def_it = item_defs_by_id.find(normalizeId(def_id));
+        if (def_it != item_defs_by_id.end() && def_it->second) {
+            display_name = def_it->second->name;
+        }
+        out.push_back(EquippedItemMsg{t, iid, display_name});
     }
     return out;
 }
@@ -143,29 +162,16 @@ void applyCombatHit(MonsterRuntime& m, int value) {
 
 void pruneEquipmentForInventory(PlayerRuntime& p) {
     for (auto it = p.data.equipment_by_type.begin(); it != p.data.equipment_by_type.end();) {
-        if (it->second < 0 || it->second >= static_cast<int>(p.data.inventory.size())) {
+        const int64_t iid = it->second;
+        bool found = false;
+        for (const auto& inv_iid : p.data.inventory) {
+            if (inv_iid == iid) { found = true; break; }
+        }
+        if (!found) {
             it = p.data.equipment_by_type.erase(it);
         } else {
             ++it;
         }
-    }
-}
-
-void onInventoryErase(PlayerRuntime& p, int erased_index) {
-    for (auto it = p.data.equipment_by_type.begin(); it != p.data.equipment_by_type.end();) {
-        if (it->second == erased_index) {
-            it = p.data.equipment_by_type.erase(it);
-        } else {
-            if (it->second > erased_index) it->second -= 1;
-            ++it;
-        }
-    }
-}
-
-void onInventorySwap(PlayerRuntime& p, int a, int b) {
-    for (auto& [_, idx] : p.data.equipment_by_type) {
-        if (idx == a) idx = b;
-        else if (idx == b) idx = a;
     }
 }
 
@@ -211,9 +217,9 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
     const LevelInfo shielding = computeLevelFromXp(state.settings.progression, self.data.shielding_xp);
     const LevelInfo evasion  = computeLevelFromXp(state.settings.progression, self.data.evasion_xp);
 
-    const int equip_attack  = computeEquippedStatBonus(self.data, state.item_defs_by_id, &ItemDef::attack);
-    const int equip_defense = computeEquippedStatBonus(self.data, state.item_defs_by_id, &ItemDef::defense);
-    const int equip_evasion = computeEquippedStatBonus(self.data, state.item_defs_by_id, &ItemDef::evasion);
+    const int equip_attack  = computeEquippedStatBonus(self.data, state.item_instances, state.item_defs_by_id, &ItemDef::attack);
+    const int equip_defense = computeEquippedStatBonus(self.data, state.item_instances, state.item_defs_by_id, &ItemDef::defense);
+    const int equip_evasion = computeEquippedStatBonus(self.data, state.item_instances, state.item_defs_by_id, &ItemDef::evasion);
 
     const int trait_hit   = melee.level;
     const int trait_block = shielding.level;
@@ -249,11 +255,42 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
     gs.trait_evasion    = std::max(1, trait_evade + equip_evasion);
     gs.trait_armor      = trait_armor;
 
-    gs.your_equipment = buildEquipmentMsgList(self.data.equipment_by_type, self.data.inventory);
+    gs.your_equipment = buildEquipmentMsgList(self.data.equipment_by_type, state.item_instances, state.item_defs_by_id);
     gs.attack_target_monster_id = self.attack_target_monster_id;
     gs.xp_gain_seq = self.xp_gain_seq;
     gs.xp_gain_amount = self.xp_gain_amount;
-    gs.inventory = self.data.inventory;
+
+    // Build inventory slot messages
+    for (const auto& iid : self.data.inventory) {
+        InventorySlotMsg slot;
+        slot.instance_id = iid;
+        if (iid > 0) {
+            auto inst_it = state.item_instances.find(iid);
+            if (inst_it != state.item_instances.end()) {
+                slot.def_id = inst_it->second.def_id;
+                // Resolve display name
+                auto def_it = state.item_defs_by_id.find(normalizeId(slot.def_id));
+                if (def_it != state.item_defs_by_id.end() && def_it->second) {
+                    slot.display_name = def_it->second->name;
+                } else {
+                    // Might be a corpse
+                    const std::string corpse_mon = parseCorpseMonsterId(slot.def_id);
+                    if (!corpse_mon.empty()) {
+                        auto mon_it = state.monster_defs_by_id.find(corpse_mon);
+                        if (mon_it != state.monster_defs_by_id.end()) {
+                            slot.display_name = mon_it->second->name + " corpse";
+                        } else {
+                            slot.display_name = slot.def_id;
+                        }
+                    } else {
+                        slot.display_name = slot.def_id;
+                    }
+                }
+            }
+        }
+        gs.inventory.push_back(std::move(slot));
+    }
+
     gs.event_text = event_text;
 
     // ---- Populate room-local players ----
@@ -276,7 +313,7 @@ GameStateMsg buildGameStateForPlayer(const PlayerRuntime& self,
         ps.combat_outcome     = combatOutcomeToInt(p.combat_outcome);
         ps.combat_outcome_seq = p.combat_outcome_seq;
         ps.combat_value       = p.combat_value;
-        ps.equipment = buildEquipmentMsgList(p.data.equipment_by_type, p.data.inventory);
+        ps.equipment = buildEquipmentMsgList(p.data.equipment_by_type, state.item_instances, state.item_defs_by_id);
         gs.players.push_back(std::move(ps));
     }
 

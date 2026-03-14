@@ -1,13 +1,14 @@
 // Runtime state for a single item lying on the ground.
-// Runtime state for a single item lying on the ground.
 #pragma once
 
 #include "tile_pos.h"
 
+#include <cstdint>
 #include <string>
 
 struct GroundItemRuntime {
-    int id = 0;
+    int id = 0;              // session-scoped network ID for ground item references
+    int64_t instance_id = 0; // unique item instance GID
     std::string item_id;
     std::string name;
     std::string sprite_tileset;

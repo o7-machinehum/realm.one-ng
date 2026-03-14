@@ -26,12 +26,23 @@ struct LoginResultMsg {
 
 struct EquippedItemMsg {
     ItemType equip_type;
-    int inventory_index = -1;
+    int64_t instance_id = 0;
     std::string item_name;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(equip_type, inventory_index, item_name);
+        ar(equip_type, instance_id, item_name);
+    }
+};
+
+struct InventorySlotMsg {
+    int64_t instance_id = 0;
+    std::string def_id;
+    std::string display_name;
+
+    template <class Ar>
+    void serialize(Ar& ar) {
+        ar(instance_id, def_id, display_name);
     }
 };
 
@@ -156,7 +167,7 @@ struct GameStateMsg {
     int attack_target_monster_id = -1;
     uint32_t xp_gain_seq = 0;
     int xp_gain_amount = 0;
-    std::vector<std::string> inventory;
+    std::vector<InventorySlotMsg> inventory;
     std::vector<PlayerStateMsg> players;
     std::vector<MonsterStateMsg> monsters;
     std::vector<NpcStateMsg> npcs;

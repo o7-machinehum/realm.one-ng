@@ -7,6 +7,7 @@
 #include <cereal/types/string.hpp>
 #include <cereal/types/vector.hpp>
 
+#include <cstdint>
 #include <string>
 
 struct LoginMsg {
@@ -69,13 +70,13 @@ struct PickupMsg {
 };
 
 struct DropMsg {
-    int inventory_index = -1;
+    int64_t instance_id = 0; // item instance GID to drop
     int to_x = -1; // -1 means drop at player's current tile
     int to_y = -1; // -1 means drop at player's current tile
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(inventory_index, to_x, to_y);
+        ar(instance_id, to_x, to_y);
     }
 };
 
@@ -102,10 +103,10 @@ struct MoveGroundItemMsg {
 
 struct SetEquipmentMsg {
     ItemType equip_type;
-    int inventory_index = -1; // -1 means unequip this type
+    int64_t instance_id = 0; // 0 means unequip this type
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(equip_type, inventory_index);
+        ar(equip_type, instance_id);
     }
 };

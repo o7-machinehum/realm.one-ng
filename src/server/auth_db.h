@@ -1,8 +1,10 @@
 #pragma once
 
 #include "item_defs.h"
+#include "item_instance.h"
 #include "tile_pos.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -20,8 +22,9 @@ struct PersistedPlayer {
     int magic_xp = 0;
     int shielding_xp = 0;
     int evasion_xp = 0;
-    std::vector<std::string> inventory;
-    std::map<ItemType, int> equipment_by_type;
+    std::vector<int64_t> inventory;              // instance IDs
+    std::map<ItemType, int64_t> equipment_by_type; // slot -> instance ID
+    std::vector<ItemInstance> owned_instances;    // all instances owned by player
 };
 
 // SQLite-backed player authentication and persistence.

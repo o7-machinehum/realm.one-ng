@@ -4,6 +4,7 @@
 #include "sprites.h"
 #include "raylib.h"
 
+#include <cstdint>
 #include <deque>
 #include <string>
 
@@ -22,7 +23,9 @@ struct AnimationComponent {
 struct DragState {
     bool active = false;
     int from_index = -1;
-    std::string item;
+    int64_t instance_id = 0;
+    std::string item;       // display name
+    std::string def_id;
 };
 
 void pushBounded(std::deque<std::string>& logs, std::string line);

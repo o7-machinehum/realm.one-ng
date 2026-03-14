@@ -52,6 +52,15 @@ void handleLoginMessage(ServerState& state, ENetPeer* peer, const Envelope& env)
         player.authenticated = true;
         player.data = std::move(persisted);
         pruneEquipmentForInventory(player);
+
+        // Reconstruct item_instances from player's persisted data
+        int64_t max_id = state.next_instance_id;
+        for (const auto& inst : player.data.owned_instances) {
+            state.item_instances[inst.id] = inst;
+            if (inst.id >= max_id) max_id = inst.id + 1;
+        }
+        if (max_id > state.next_instance_id) state.next_instance_id = max_id;
+
         updatePlayerVitalsFromLevel(player, state);
         player.hp = player.max_hp;
         player.mana = player.max_mana;
@@ -196,12 +205,28 @@ void handlePickupMessage(ServerState& state, ENetPeer* peer, const Envelope& env
             broadcastGameState(state, event);
             return;
         }
-        if (parseCorpseMonsterId(state.items[idx].item_id).empty()) {
-            player.data.inventory.push_back(state.items[idx].name);
-        } else {
-            player.data.inventory.push_back(state.items[idx].item_id);
+        const auto& ground_item = state.items[idx];
+        // Use the ground item's instance_id if it has one, otherwise allocate
+        int64_t iid = ground_item.instance_id;
+        if (iid <= 0) {
+            iid = allocateItemInstance(state, ground_item.item_id);
         }
-        event = player.data.username + " picked up " + state.items[idx].name;
+        // Insert into first empty slot, or append if none
+        bool inserted = false;
+        for (size_t s = 0; s < player.data.inventory.size(); ++s) {
+            if (player.data.inventory[s] == 0) {
+                player.data.inventory[s] = iid;
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) player.data.inventory.push_back(iid);
+        // Add to player's owned instances
+        auto inst_it = state.item_instances.find(iid);
+        if (inst_it != state.item_instances.end()) {
+            player.data.owned_instances.push_back(inst_it->second);
+        }
+        event = player.data.username + " picked up " + ground_item.name;
         state.items.erase(state.items.begin() + idx);
         persistPlayer(player, *state.auth_db);
     }
@@ -217,74 +242,102 @@ void handleDropMessage(ServerState& state, ENetPeer* peer, const Envelope& env) 
 
     DropMsg m = fromBytes<DropMsg>(env.payload.data(), env.payload.size());
     std::string event = player.data.username + " has nothing to drop";
-    if (m.inventory_index >= 0 &&
-        m.inventory_index < static_cast<int>(player.data.inventory.size())) {
-        const Room* room = state.world->getRoom(player.data.room);
-        if (!room) return;
 
-        TilePos drop_pos = player.data.pos;
-        if (m.to_x >= 0 && m.to_y >= 0) {
-            drop_pos = {m.to_x, m.to_y};
-        }
-        if (drop_pos.x < 0 || drop_pos.y < 0 ||
-            drop_pos.x >= room->map_width() || drop_pos.y >= room->map_height()) {
-            return;
-        }
-        if (!room->isWalkable(drop_pos.x, drop_pos.y)) return;
-        if (isTileOccupiedByMonster(state, player.data.room, drop_pos) ||
-            isTileOccupiedByNpc(state, player.data.room, drop_pos) ||
-            isTileOccupiedByPlayer(state, peer, player.data.room, drop_pos)) {
-            return;
-        }
-        const int throw_dist = tileDistance(player.data.pos, drop_pos);
-        if (throw_dist > kThrowRangeTiles) return;
+    if (m.instance_id <= 0) {
+        broadcastGameState(state, event);
+        return;
+    }
 
-        const std::string inv_entry = player.data.inventory[m.inventory_index];
-        GroundItemRuntime drop_item{};
-        drop_item.id = state.next_item_id++;
-        drop_item.room = player.data.room;
-        drop_item.pos = drop_pos;
+    // Find this instance_id in inventory
+    auto inv_it = std::find(player.data.inventory.begin(), player.data.inventory.end(), m.instance_id);
+    if (inv_it == player.data.inventory.end()) {
+        broadcastGameState(state, event);
+        return;
+    }
 
-        const std::string corpse_monster_id = parseCorpseMonsterId(inv_entry);
-        bool can_drop = false;
-        if (!corpse_monster_id.empty()) {
-            auto dit = state.monster_defs_by_id.find(corpse_monster_id);
-            if (dit != state.monster_defs_by_id.end()) {
-                const MonsterDef& def = *dit->second;
-                drop_item.item_id = makeCorpseItemId(def.id);
-                drop_item.name = def.name + " corpse";
-                drop_item.sprite_tileset = def.sprite_tileset;
-                drop_item.sprite_name = def.id;
-                drop_item.sprite_w_tiles = std::max(1, def.monster_size_w);
-                drop_item.sprite_h_tiles = std::max(1, def.monster_size_h);
-                drop_item.sprite_clip = 1;
-                can_drop = true;
-            }
-        } else {
-            const std::string item_name = inv_entry;
-            std::string item_id = normalizeId(item_name);
-            drop_item.item_id = item_id;
-            drop_item.name = item_name;
-            drop_item.sprite_tileset = "materials2.tsx";
-            drop_item.sprite_name = item_id;
-            auto def_it = state.item_defs_by_id.find(item_id);
-            if (def_it != state.item_defs_by_id.end()) {
-                drop_item.item_id = def_it->second->id;
-                drop_item.name = item_name;
-                drop_item.sprite_tileset = def_it->second->sprite_tileset;
-                drop_item.sprite_name = def_it->second->id;
-            }
+    const Room* room = state.world->getRoom(player.data.room);
+    if (!room) return;
+
+    TilePos drop_pos = player.data.pos;
+    if (m.to_x >= 0 && m.to_y >= 0) {
+        drop_pos = {m.to_x, m.to_y};
+    }
+    if (drop_pos.x < 0 || drop_pos.y < 0 ||
+        drop_pos.x >= room->map_width() || drop_pos.y >= room->map_height()) {
+        return;
+    }
+    if (!room->isWalkable(drop_pos.x, drop_pos.y)) return;
+    if (isTileOccupiedByMonster(state, player.data.room, drop_pos) ||
+        isTileOccupiedByNpc(state, player.data.room, drop_pos) ||
+        isTileOccupiedByPlayer(state, peer, player.data.room, drop_pos)) {
+        return;
+    }
+    const int throw_dist = tileDistance(player.data.pos, drop_pos);
+    if (throw_dist > kThrowRangeTiles) return;
+
+    // Look up the instance
+    auto inst_it = state.item_instances.find(m.instance_id);
+    if (inst_it == state.item_instances.end()) return;
+    const std::string& def_id = inst_it->second.def_id;
+
+    GroundItemRuntime drop_item{};
+    drop_item.id = state.next_item_id++;
+    drop_item.instance_id = m.instance_id;
+    drop_item.room = player.data.room;
+    drop_item.pos = drop_pos;
+
+    const std::string corpse_monster_id = parseCorpseMonsterId(def_id);
+    bool can_drop = false;
+    if (!corpse_monster_id.empty()) {
+        auto dit = state.monster_defs_by_id.find(corpse_monster_id);
+        if (dit != state.monster_defs_by_id.end()) {
+            const MonsterDef& def = *dit->second;
+            drop_item.item_id = makeCorpseItemId(def.id);
+            drop_item.name = def.name + " corpse";
+            drop_item.sprite_tileset = def.sprite_tileset;
+            drop_item.sprite_name = def.id;
+            drop_item.sprite_w_tiles = std::max(1, def.monster_size_w);
+            drop_item.sprite_h_tiles = std::max(1, def.monster_size_h);
+            drop_item.sprite_clip = 1;
             can_drop = true;
         }
-        if (!can_drop) return;
-
-        player.data.inventory.erase(player.data.inventory.begin() + m.inventory_index);
-        onInventoryErase(player, m.inventory_index);
-        state.items.push_back(std::move(drop_item));
-
-        event = player.data.username + " dropped " + state.items.back().name;
-        persistPlayer(player, *state.auth_db);
+    } else {
+        std::string item_id = normalizeId(def_id);
+        drop_item.item_id = item_id;
+        drop_item.name = def_id;
+        drop_item.sprite_tileset = "materials2.tsx";
+        drop_item.sprite_name = item_id;
+        auto def_it = state.item_defs_by_id.find(item_id);
+        if (def_it != state.item_defs_by_id.end()) {
+            drop_item.item_id = def_it->second->id;
+            drop_item.name = def_it->second->name;
+            drop_item.sprite_tileset = def_it->second->sprite_tileset;
+            drop_item.sprite_name = def_it->second->id;
+        }
+        can_drop = true;
     }
+    if (!can_drop) return;
+
+    // Remove from inventory (equipment auto-invalidated since GID no longer in inventory)
+    player.data.inventory.erase(inv_it);
+    // Remove from equipment if equipped
+    for (auto eq_it = player.data.equipment_by_type.begin(); eq_it != player.data.equipment_by_type.end();) {
+        if (eq_it->second == m.instance_id) {
+            eq_it = player.data.equipment_by_type.erase(eq_it);
+        } else {
+            ++eq_it;
+        }
+    }
+    // Remove from owned instances
+    player.data.owned_instances.erase(
+        std::remove_if(player.data.owned_instances.begin(), player.data.owned_instances.end(),
+            [&](const ItemInstance& inst) { return inst.id == m.instance_id; }),
+        player.data.owned_instances.end());
+
+    state.items.push_back(std::move(drop_item));
+
+    event = player.data.username + " dropped " + state.items.back().name;
+    persistPlayer(player, *state.auth_db);
 
     broadcastGameState(state, event);
 }
@@ -301,19 +354,19 @@ void handleInventorySwapMessage(ServerState& state, ENetPeer* peer, const Envelo
         max_idx < kInventoryLimit &&
         m.from_index != m.to_index &&
         m.from_index < static_cast<int>(player.data.inventory.size())) {
-        // Resize inventory to accommodate target slot (empty slots are empty strings)
+        // Resize inventory to accommodate target slot (empty slots are 0)
         if (max_idx >= static_cast<int>(player.data.inventory.size())) {
-            player.data.inventory.resize(max_idx + 1);
+            player.data.inventory.resize(max_idx + 1, 0);
         }
         // Auto-unequip if source item is currently equipped (drag from equipment)
+        const int64_t from_iid = player.data.inventory[m.from_index];
         for (auto it = player.data.equipment_by_type.begin(); it != player.data.equipment_by_type.end(); ++it) {
-            if (it->second == m.from_index) {
+            if (it->second == from_iid) {
                 player.data.equipment_by_type.erase(it);
                 break;
             }
         }
         std::swap(player.data.inventory[m.from_index], player.data.inventory[m.to_index]);
-        onInventorySwap(player, m.from_index, m.to_index);
         persistPlayer(player, *state.auth_db);
         broadcastGameState(state, player.data.username + " rearranged inventory");
     }
@@ -327,21 +380,75 @@ void handleSetEquipmentMessage(ServerState& state, ENetPeer* peer, const Envelop
 
     SetEquipmentMsg m = fromBytes<SetEquipmentMsg>(env.payload.data(), env.payload.size());
 
-    if (m.inventory_index < 0) {
-        player.data.equipment_by_type.erase(m.equip_type);
+    if (m.instance_id <= 0) {
+        // Find which instance_id was in this equipment slot before erasing
+        auto eq_it = player.data.equipment_by_type.find(m.equip_type);
+        if (eq_it != player.data.equipment_by_type.end()) {
+            const int64_t old_iid = eq_it->second;
+            player.data.equipment_by_type.erase(eq_it);
+
+            // Move the unequipped item from the back of inventory into the
+            // first empty hotbar slot, so it becomes visible/usable again.
+            auto inv_it = std::find(player.data.inventory.begin(), player.data.inventory.end(), old_iid);
+            if (inv_it != player.data.inventory.end()) {
+                *inv_it = 0; // clear its current position
+                bool placed = false;
+                const int hotbar_end = std::min(kHotbarSlots, static_cast<int>(player.data.inventory.size()));
+                for (int i = 0; i < hotbar_end; ++i) {
+                    if (player.data.inventory[i] == 0) {
+                        player.data.inventory[i] = old_iid;
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    // Hotbar full — put in first empty slot anywhere
+                    for (size_t i = 0; i < player.data.inventory.size(); ++i) {
+                        if (player.data.inventory[i] == 0) {
+                            player.data.inventory[i] = old_iid;
+                            placed = true;
+                            break;
+                        }
+                    }
+                }
+                if (!placed) {
+                    player.data.inventory.push_back(old_iid);
+                }
+            }
+        } else {
+            player.data.equipment_by_type.erase(m.equip_type);
+        }
         persistPlayer(player, *state.auth_db);
         broadcastGameState(state, player.data.username + " unequipped");
         return;
     }
 
-    if (m.inventory_index >= static_cast<int>(player.data.inventory.size())) return;
-    const std::string& inv_item_name = player.data.inventory[m.inventory_index];
-    auto it = state.item_defs_by_id.find(normalizeId(inv_item_name));
-    if (it == state.item_defs_by_id.end()) return;
+    // Validate instance_id is in inventory
+    bool in_inventory = false;
+    for (const auto& iid : player.data.inventory) {
+        if (iid == m.instance_id) { in_inventory = true; break; }
+    }
+    if (!in_inventory) return;
 
-    player.data.equipment_by_type[m.equip_type] = m.inventory_index;
+    // Look up instance to validate
+    auto inst_it = state.item_instances.find(m.instance_id);
+    if (inst_it == state.item_instances.end()) return;
+    const auto& def_id = inst_it->second.def_id;
+    auto def_it = state.item_defs_by_id.find(normalizeId(def_id));
+    if (def_it == state.item_defs_by_id.end()) return;
+
+    player.data.equipment_by_type[m.equip_type] = m.instance_id;
+
+    // Move equipped item out of its current slot to the end of inventory,
+    // freeing the hotbar slot so pickups can fill it.
+    auto inv_it = std::find(player.data.inventory.begin(), player.data.inventory.end(), m.instance_id);
+    if (inv_it != player.data.inventory.end()) {
+        *inv_it = 0;
+        player.data.inventory.push_back(m.instance_id);
+    }
+
     persistPlayer(player, *state.auth_db);
-    broadcastGameState(state, player.data.username + " equipped " + inv_item_name);
+    broadcastGameState(state, player.data.username + " equipped " + def_it->second->name);
 }
 
 void handleMoveGroundItemMessage(ServerState& state, ENetPeer* peer, const Envelope& env) {

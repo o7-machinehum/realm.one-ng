@@ -1,0 +1,57 @@
+texture = "widgets/equiptment_bar.png"
+
+[[slots]]
+item_type = "Armor"
+x = 8
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Weapon"
+x = 46
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Ring"
+x = 84
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Legs"
+x = 122
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Boots"
+x = 160
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Helmet"
+x = 198
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Necklace"
+x = 236
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+item_type = "Shield"
+x = 274
+y = 8
+w = 32
+h = 32

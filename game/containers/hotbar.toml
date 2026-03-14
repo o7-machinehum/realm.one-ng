@@ -1,0 +1,61 @@
+texture = "widgets/hotbar.png"
+
+[[slots]]
+x = 8
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 46
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 84
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 122
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 160
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 198
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 236
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 274
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 312
+y = 8
+w = 32
+h = 32
+
+[[slots]]
+x = 350
+y = 8
+w = 32
+h = 32
