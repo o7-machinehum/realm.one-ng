@@ -2,10 +2,10 @@
 <map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="20" tilewidth="16" tileheight="16" infinite="0" nextlayerid="23" nextobjectid="3">
  <tileset firstgid="1" source="../../../../game/assets/art/cave.tsx"/>
  <tileset firstgid="1001" source="../../../../game/assets/art/properties.tsx"/>
- <tileset firstgid="2001" source="../../../../game/assets/art/npc_test.tsx"/>
+ <tileset firstgid="2001" source="../../../../game/assets/art/monsters/npc_test.tsx"/>
  <tileset firstgid="2129" source="../../../../game/assets/art/materials2.tsx"/>
  <tileset firstgid="2193" source="../../../../game/assets/art/overworld.tsx"/>
- <tileset firstgid="3633" source="../../../../game/assets/art/slime.tsx"/>
+ <tileset firstgid="3633" source="../../../../game/assets/art/monsters/slime.tsx"/>
  <tileset firstgid="3697" source="../../../../game/assets/art/boats.tsx"/>
  <layer id="1" name="L0" width="30" height="20">
   <data encoding="csv">

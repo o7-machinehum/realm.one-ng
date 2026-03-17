@@ -104,10 +104,10 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
             out.sprite_tileset = parseStringValue(raw_val);
         }
         else if (key == "item_type") {
-            out.item_type = parseItemType(raw_val);
+            out.item_type = parseItemType(parseStringValue(raw_val));
         }
         else if (key == "item_subtype") {
-            out.item_subtype = stringToItemSubType(raw_val);
+            out.item_subtype = stringToItemSubType(parseStringValue(raw_val));
         }
         else if (key == "attack") { int v = out.attack; if (parseInt(raw_val, v)) out.attack = v; }
         else if (key == "defense") {
@@ -119,6 +119,7 @@ bool parseTomlSubsetFile(const fs::path& p, ItemDef& out) {
             bool b = out.stackable;
             if (parseBool(raw_val, b)) out.stackable = b;
         }
+        else if (key == "swing_type") out.swing_type = parseStringValue(raw_val);
     }
 
     return true;

@@ -75,7 +75,14 @@ std::vector<EquippedItemMsg> buildEquipmentMsgList(
         if (def_it != item_defs_by_id.end() && def_it->second) {
             display_name = def_it->second->name;
         }
-        out.push_back(EquippedItemMsg{t, iid, display_name});
+        std::string sprite_tileset;
+        std::string sprite_name = normalizeId(def_id);
+        std::string swing_type;
+        if (def_it != item_defs_by_id.end() && def_it->second) {
+            sprite_tileset = def_it->second->sprite_tileset;
+            swing_type = def_it->second->swing_type;
+        }
+        out.push_back(EquippedItemMsg{t, iid, display_name, sprite_tileset, sprite_name, swing_type});
     }
     return out;
 }

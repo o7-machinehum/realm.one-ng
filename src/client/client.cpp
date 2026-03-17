@@ -95,11 +95,11 @@ int main(int argc, char** argv) {
     Sprites sprites;
     Sprites::SizeOverrideMap player_size_overrides;
     player_size_overrides["player_1"] = {1, 2};
-    if (!sprites.loadTSX("game/assets/art/character.tsx", player_size_overrides)) {
-        fatalAssetError("FATAL: Failed to load game/assets/art/character.tsx");
+    if (!sprites.loadTSX("game/assets/art/characters/character.tsx", player_size_overrides)) {
+        fatalAssetError("FATAL: Failed to load game/assets/art/characters/character.tsx");
         return 1;
     }
-    const std::string character_tex_path = "game/assets/art/" + sprites.image_source();
+    const std::string character_tex_path = "game/assets/art/characters/" + sprites.image_source();
     Texture2D character_tex = LoadTexture(character_tex_path.c_str());
     if (character_tex.id == 0) {
         fatalAssetError("FATAL: Failed to load character texture");
@@ -190,6 +190,7 @@ int main(int argc, char** argv) {
         item_defs_by_key[client::normalizeKey(def.id)] = def;
         item_defs_by_key[client::normalizeKey(def.name)] = def;
     }
+    const auto swing_defs = client::loadSwingDefs("data/global.toml");
     for (const auto& def : loadMonsterDefs("game/monsters")) {
         monster_defs_by_id[client::normalizeKey(def.id)] = def;
     }
@@ -392,6 +393,7 @@ int main(int argc, char** argv) {
             client::updateNpcSheetCache(*game_state, monster_sheet_cache);
             client::updateItemSheetCacheFromGroundItems(*game_state, item_sheet_cache);
             client::updateItemSheetCacheFromInventory(*game_state, item_defs_by_key, monster_defs_by_id, item_sheet_cache);
+            client::updateItemSheetCacheFromEquipment(*game_state, item_sheet_cache);
             if (!game_state->event_text.empty() && game_state->event_text != last_event) {
                 last_event = game_state->event_text;
             }
@@ -459,6 +461,7 @@ int main(int argc, char** argv) {
             draw_cfg.map_origin_y = map_origin_y + new_off_y;
             draw_cfg.map_view_width = map_draw_w;
             draw_cfg.map_view_height = map_draw_h;
+            draw_cfg.swing_defs = &swing_defs;
             const auto monster_sheet_view = [&](const std::string& tsx) -> client::SpriteSheetView {
                 auto it = monster_sheet_cache.find(tsx);
                 if (it == monster_sheet_cache.end()) return {};

@@ -1,5 +1,5 @@
 name = "Old Man"
-sprite_tileset = "old_man.tsx"
+sprite_tileset = "npcs/old_man.tsx"
 npc_size = "1x2"
 speed_ms = 1000
 wander_radius = 2

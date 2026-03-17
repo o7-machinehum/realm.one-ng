@@ -5,19 +5,19 @@
     },
     "activeFile": "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
     "expandedProjectPaths": [
-        "/home/machinehum/the_island/data/worlds/500_501",
-        "/home/machinehum/the_island/data/rooms",
-        "/home/machinehum/the_island/data/worlds/501_500/rooms",
-        "/home/machinehum/the_island/data/worlds/500_500/rooms",
         "/home/machinehum/the_island/data/worlds/501_501",
+        "/home/machinehum/the_island/data/worlds/501_501/rooms",
+        "/home/machinehum/the_island/data/worlds/realm_one",
+        "/home/machinehum/the_island/data/worlds/500_501",
+        "/home/machinehum/the_island/data/worlds/501_500",
+        "/home/machinehum/the_island/data/worlds/500_500",
+        "/home/machinehum/the_island/data/worlds/501_500/rooms",
         "art",
-        ".",
         "/home/machinehum/the_island/data/worlds/500_501/rooms",
         "/home/machinehum/the_island/data/worlds",
-        "/home/machinehum/the_island/data/worlds/501_500",
-        "/home/machinehum/the_island/data/worlds/realm_one",
-        "/home/machinehum/the_island/data/worlds/500_500",
-        "/home/machinehum/the_island/data/worlds/501_501/rooms"
+        "/home/machinehum/the_island/data/rooms",
+        ".",
+        "/home/machinehum/the_island/data/worlds/500_500/rooms"
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
@@ -98,7 +98,7 @@
             "scale": 2,
             "selectedLayer": 14,
             "viewCenter": {
-                "x": 349,
+                "x": 31.5,
                 "y": 166.5
             }
         },
@@ -109,8 +109,8 @@
             "scale": 3,
             "selectedLayer": 14,
             "viewCenter": {
-                "x": 202.16666666666666,
-                "y": 159.99999999999997
+                "x": 239.99999999999997,
+                "y": 160
             }
         },
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx": {
@@ -144,16 +144,16 @@
             "scale": 3,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 240.16666666666663,
-                "y": 159.99999999999997
+                "x": 239.99999999999997,
+                "y": 160
             }
         },
         "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx": {
             "scale": 3,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 438.3333333333333,
-                "y": 1212.6666666666665
+                "x": 239.99999999999997,
+                "y": 160
             }
         },
         "/home/machinehum/the_island/data/worlds/game/assets/art/cave.tsx": {
@@ -226,9 +226,18 @@
             "scaleInDock": 1,
             "scaleInEditor": 4
         },
+        "art/monsters/npc_test.tsx": {
+            "scaleInDock": 1
+        },
+        "art/monsters/slime.tsx": {
+            "scaleInDock": 1
+        },
         "art/npc_test.tsx": {
             "scaleInDock": 4,
             "scaleInEditor": 4
+        },
+        "art/npcs/old_man.tsx": {
+            "scaleInDock": 1
         },
         "art/objects.tsx": {
             "scaleInDock": 2,
@@ -270,7 +279,6 @@
     "map.tileWidth": 16,
     "openFiles": [
         "art/tiny16.tsx",
-        "art/npc_test.tsx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx",
         "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx",
@@ -284,7 +292,6 @@
     "property.type": "portal",
     "recentFiles": [
         "art/tiny16.tsx",
-        "art/npc_test.tsx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/n1.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/house.tmx",
         "/home/machinehum/the_island/data/worlds/501_501/rooms/0.tmx",
@@ -293,6 +300,7 @@
         "art/objects.tsx",
         "/home/machinehum/the_island/data/worlds/501_500/rooms/0.tmx",
         "/home/machinehum/the_island/data/worlds/500_500/rooms/0.tmx",
+        "art/npc_test.tsx",
         "art/old_man.tsx",
         "art/properties.tsx"
     ],

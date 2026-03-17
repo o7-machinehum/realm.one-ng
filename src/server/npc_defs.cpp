@@ -153,7 +153,7 @@ NpcDef fallbackDefFromId(const std::string& id) {
     NpcDef d;
     d.id = id;
     d.name = id;
-    d.sprite_tileset = "character.tsx";
+    d.sprite_tileset = "characters/character.tsx";
     return d;
 }
 

@@ -23,3 +23,15 @@ exp_per_level_c = 100
 [gameplay]
 # Dead monsters respawn after this delay (milliseconds).
 monster_respawn_ms = 15000
+
+[swing.sidearm]
+arc_degrees = 120
+start_offset_degrees = -100
+radius_tiles = 0.1
+duration_sec = 0.20
+
+[swing.overhead]
+arc_degrees = 135
+start_offset_degrees = -90
+radius_tiles = 0.5
+duration_sec = 0.35

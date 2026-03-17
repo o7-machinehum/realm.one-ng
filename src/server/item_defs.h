@@ -42,6 +42,7 @@ struct ItemDef {
     int defense = 0;
     int evasion = 0;
     bool stackable = false;
+    std::string swing_type;
 
     /* Can this item be equipt? */
     bool is_equipt_type() {

@@ -23,6 +23,14 @@ struct ItemUiDef {
     std::string name;
     std::string sprite_tileset;
     ItemType item_type = ItemType::Weapon;
+    std::string swing_type;
+};
+
+struct SwingDef {
+    float arc_degrees = 120.0f;
+    float start_offset_degrees = -150.0f;
+    float radius_tiles = 0.6f;
+    float duration_sec = 0.30f;
 };
 
 // Produces a lowercase, trimmed key for id lookups.
@@ -48,6 +56,13 @@ void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
                                        const std::unordered_map<std::string, ItemUiDef>& item_defs_by_key,
                                        const std::unordered_map<std::string, MonsterDef>& monster_defs_by_id,
                                        std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);
+
+// Refreshes cache entries needed to render equipped-item swing overlays.
+void updateItemSheetCacheFromEquipment(const GameStateMsg& game_state,
+                                       std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);
+
+// Loads swing preset definitions from a global TOML config file.
+std::unordered_map<std::string, SwingDef> loadSwingDefs(const std::string& path);
 
 // Unloads textures held by a sheet cache map.
 void unloadSheetCache(std::unordered_map<std::string, SpriteSheetCacheEntry>& cache);

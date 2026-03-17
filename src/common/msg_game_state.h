@@ -28,10 +28,13 @@ struct EquippedItemMsg {
     ItemType equip_type;
     int64_t instance_id = 0;
     std::string item_name;
+    std::string sprite_tileset;
+    std::string sprite_name;
+    std::string swing_type;
 
     template <class Ar>
     void serialize(Ar& ar) {
-        ar(equip_type, instance_id, item_name);
+        ar(equip_type, instance_id, item_name, sprite_tileset, sprite_name, swing_type);
     }
 };
 

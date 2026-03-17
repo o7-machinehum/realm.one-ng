@@ -41,7 +41,10 @@ bool refreshSheetCacheEntry(SpriteSheetCacheEntry& entry,
         return false;
     }
 
-    const std::string tex_path = "game/assets/art/" + entry.sprites.image_source();
+    // Resolve texture path relative to the TSX file's directory
+    const auto last_slash = tsx_path.rfind('/');
+    const std::string tsx_dir = (last_slash != std::string::npos) ? tsx_path.substr(0, last_slash + 1) : "";
+    const std::string tex_path = tsx_dir + entry.sprites.image_source();
     entry.tex = LoadTexture(tex_path.c_str());
     return (entry.tex.id != 0);
 }
@@ -82,6 +85,7 @@ std::vector<ItemUiDef> loadClientItemDefs(const std::string& dir_path) {
             const std::string value = trimWhitespace(line.substr(eq + 1));
             if (key == "name") def.name = parseTomlString(value);
             else if (key == "sprite_tileset") def.sprite_tileset = parseTomlString(value);
+            else if (key == "swing_type") def.swing_type = parseTomlString(value);
             else if (key == "equip_type" || key == "item_type" || key == "type" || key == "slot") {
                 def.item_type = stringToItemType(parseTomlString(value));
             }
@@ -161,6 +165,64 @@ void updateItemSheetCacheFromInventory(const GameStateMsg& game_state,
         auto& entry = cache[tsx];
         refreshSheetCacheEntry(entry, size_key, size_val, tsx);
     }
+}
+
+// Ensures equipped-item tilesets are loaded so swing overlays can render.
+void updateItemSheetCacheFromEquipment(const GameStateMsg& game_state,
+                                       std::unordered_map<std::string, SpriteSheetCacheEntry>& cache) {
+    auto ensure = [&](const std::vector<EquippedItemMsg>& eq) {
+        for (const auto& e : eq) {
+            if (e.sprite_tileset.empty()) continue;
+            auto& entry = cache[e.sprite_tileset];
+            const std::string size_key = normalizeKey(e.sprite_name.empty() ? e.item_name : e.sprite_name);
+            const std::pair<int, int> size_val{1, 1};
+            refreshSheetCacheEntry(entry, size_key, size_val, e.sprite_tileset);
+        }
+    };
+    ensure(game_state.your_equipment);
+    for (const auto& p : game_state.players) {
+        ensure(p.equipment);
+    }
+}
+
+// Parses [swing.*] tables from global TOML into SwingDef presets.
+std::unordered_map<std::string, SwingDef> loadSwingDefs(const std::string& path) {
+    std::unordered_map<std::string, SwingDef> out;
+    std::ifstream in(path);
+    if (!in) return out;
+
+    std::string section;
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto hash = line.find('#');
+        if (hash != std::string::npos) line = line.substr(0, hash);
+        line = trimWhitespace(line);
+        if (line.empty()) continue;
+
+        if (line.front() == '[' && line.back() == ']') {
+            section = trimWhitespace(line.substr(1, line.size() - 2));
+            continue;
+        }
+
+        // Only process [swing.*] sections
+        if (section.size() <= 6 || section.substr(0, 6) != "swing.") continue;
+        const std::string preset_name = section.substr(6);
+
+        const auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = trimWhitespace(line.substr(0, eq));
+        const std::string value = trimWhitespace(line.substr(eq + 1));
+
+        SwingDef& def = out[preset_name];
+        try {
+            if (key == "arc_degrees") def.arc_degrees = std::stof(value);
+            else if (key == "start_offset_degrees") def.start_offset_degrees = std::stof(value);
+            else if (key == "radius_tiles") def.radius_tiles = std::stof(value);
+            else if (key == "duration_sec") def.duration_sec = std::stof(value);
+        } catch (...) {}
+    }
+
+    return out;
 }
 
 // Releases textures owned by a cache map before shutdown.

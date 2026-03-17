@@ -11,11 +11,11 @@
  </properties>
  <tileset firstgid="1" source="../../../../game/assets/art/cave.tsx"/>
  <tileset firstgid="1001" source="../../../../game/assets/art/properties.tsx"/>
- <tileset firstgid="2001" source="../../../../game/assets/art/npc_test.tsx"/>
+ <tileset firstgid="2001" source="../../../../game/assets/art/monsters/npc_test.tsx"/>
  <tileset firstgid="2129" source="../../../../game/assets/art/materials2.tsx"/>
  <tileset firstgid="2193" source="../../../../game/assets/art/overworld.tsx"/>
  <tileset firstgid="3633" source="../../../../game/assets/art/inner.tsx"/>
- <tileset firstgid="4633" source="../../../../game/assets/art/old_man.tsx"/>
+ <tileset firstgid="4633" source="../../../../game/assets/art/npcs/old_man.tsx"/>
  <layer id="17" name="L0" width="30" height="20">
   <data encoding="csv">
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "client_sheet_cache.h"
 #include "client_support.h"
 #include "msg.h"
 #include "room.h"
@@ -18,6 +19,7 @@ struct SceneState {
         int outcome = 0; // 0 none, 1 hit, 2 missed, 3 blocked
         int value = 0;
         float timer = 0.0f;
+        float delay = 0.0f; // wait before showing FX (syncs with swing contact)
     };
     std::unordered_map<std::string, AnimationComponent> anim_by_key;
     std::unordered_map<std::string, std::pair<int, int>> prev_pos_by_key;
@@ -53,6 +55,7 @@ struct SceneConfig {
     float monster_name_text_size = 16.0f;
     float npc_name_text_size = 13.0f;
     float speech_text_size = 16.0f;
+    const std::unordered_map<std::string, SwingDef>* swing_defs = nullptr;
 };
 
 struct SceneOutput {

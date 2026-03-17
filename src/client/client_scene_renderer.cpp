@@ -10,6 +10,13 @@
 
 #include "rlgl.h"
 
+#ifndef DEG2RAD
+#define DEG2RAD (PI / 180.0f)
+#endif
+#ifndef RAD2DEG
+#define RAD2DEG (180.0f / PI)
+#endif
+
 namespace client {
 namespace {
 
@@ -33,7 +40,7 @@ ResolvedSheet resolveSheet(const std::function<SpriteSheetView(const std::string
     return {s, t};
 }
 
-float updateAttackTimer(SceneState& state, const std::string& key, uint32_t current_seq, float dt) {
+float updateAttackTimer(SceneState& state, const std::string& key, uint32_t current_seq, float dt, float duration = 0.35f) {
     auto& timer = state.attack_fx_timer_by_key[key];
     auto last_seq_it = state.last_attack_seq_by_key.find(key);
     if (last_seq_it == state.last_attack_seq_by_key.end()) {
@@ -41,7 +48,7 @@ float updateAttackTimer(SceneState& state, const std::string& key, uint32_t curr
         timer = 0.0f;
     } else if (last_seq_it->second != current_seq) {
         last_seq_it->second = current_seq;
-        timer = 0.35f;
+        timer = duration;
     } else {
         timer = std::max(0.0f, timer - dt);
     }
@@ -49,19 +56,24 @@ float updateAttackTimer(SceneState& state, const std::string& key, uint32_t curr
 }
 
 void updateCombatOutcomeFxState(SceneState& state, const std::string& key,
-                                uint32_t current_seq, int outcome, int value, float dt) {
+                                uint32_t current_seq, int outcome, int value, float dt,
+                                float delay = 0.0f) {
     auto& fx = state.combat_outcome_fx_by_key[key];
     auto last_it = state.last_combat_outcome_seq_by_key.find(key);
     if (last_it == state.last_combat_outcome_seq_by_key.end()) {
         state.last_combat_outcome_seq_by_key[key] = current_seq;
         fx.timer = 0.0f;
+        fx.delay = 0.0f;
         fx.outcome = 0;
         fx.value = 0;
     } else if (last_it->second != current_seq) {
         last_it->second = current_seq;
         fx.outcome = outcome;
         fx.value = value;
+        fx.delay = (outcome == 0) ? 0.0f : delay;
         fx.timer = (outcome == 0) ? 0.0f : kCombatFxDurationSec;
+    } else if (fx.delay > 0.0f) {
+        fx.delay = std::max(0.0f, fx.delay - dt);
     } else {
         fx.timer = std::max(0.0f, fx.timer - dt);
     }
@@ -84,7 +96,7 @@ void drawCombatOutcomeFx(const SceneState& state, const std::string& key,
     auto it = state.combat_outcome_fx_by_key.find(key);
     if (it == state.combat_outcome_fx_by_key.end()) return;
     const SceneState::CombatOutcomeFx& fx = it->second;
-    if (fx.timer <= 0.0f || fx.outcome <= 0) return;
+    if (fx.timer <= 0.0f || fx.outcome <= 0 || fx.delay > 0.0f) return;
 
     const CombatFxAtlas& atlas = combatFxAtlas();
     const float t = std::clamp(fx.timer / kCombatFxDurationSec, 0.0f, 1.0f);
@@ -115,6 +127,47 @@ void drawCombatOutcomeFx(const SceneState& state, const std::string& key,
                          feet_x, py - 2.0f,
                          Color{235, 48, 48, 255}, progress, 34.0f);
     }
+}
+
+float baseDegForDir(Dir d) {
+    switch (d) {
+        case Dir::S: return 270.0f;
+        case Dir::N: return 90.0f;
+        case Dir::E: return 0.0f;
+        case Dir::W: return 180.0f;
+        default: return 270.0f;
+    }
+}
+
+const EquippedItemMsg* findWeaponEquipment(const std::vector<EquippedItemMsg>& eq) {
+    for (const auto& e : eq) {
+        if (e.equip_type == ItemType::Weapon && e.instance_id > 0) return &e;
+    }
+    return nullptr;
+}
+
+void drawItemSwing(float center_x, float center_y,
+                   Dir facing, float progress,
+                   const SwingDef& swing,
+                   Rectangle src_rect, Texture2D tex,
+                   float tile_w, float tile_h, float scale) {
+    const float base_deg = baseDegForDir(facing);
+    const float start_deg = base_deg + swing.start_offset_degrees;
+    const float end_deg = start_deg + swing.arc_degrees;
+    const float current_deg = start_deg + (end_deg - start_deg) * progress;
+    const float rad = current_deg * DEG2RAD;
+
+    const float radius_px = swing.radius_tiles * tile_w;
+    const float ix = center_x + std::cos(rad) * radius_px;
+    const float iy = center_y - std::sin(rad) * radius_px;
+
+    const float item_w = src_rect.width * scale;
+    const float item_h = src_rect.height * scale;
+    const float rotation = -(current_deg - 90.0f);
+
+    Rectangle dst{ix, iy, item_w, item_h};
+    Vector2 origin{item_w * 0.5f, item_h * 0.85f};
+    DrawTexturePro(tex, src_rect, dst, origin, rotation, WHITE);
 }
 
 } // namespace
@@ -231,6 +284,19 @@ void drawScene(const Room& room,
     const float tile_w = room.tile_width() * cfg.map_scale;
     const float tile_h = room.tile_height() * cfg.map_scale;
 
+    // Pre-compute local player's swing duration for monster combat FX delay
+    float player_swing_duration = 0.35f;
+    if (cfg.swing_defs) {
+        const EquippedItemMsg* weap = findWeaponEquipment(game_state.your_equipment);
+        if (weap) {
+            std::string st = weap->swing_type;
+            if (st.empty()) st = "sidearm";
+            auto sd_it = cfg.swing_defs->find(st);
+            if (sd_it != cfg.swing_defs->end()) player_swing_duration = sd_it->second.duration_sec;
+        }
+    }
+    constexpr float kSwingContactFraction = 0.7f;
+    const float monster_fx_delay = player_swing_duration * kSwingContactFraction;
 
     std::vector<std::pair<int, Rectangle>> monster_click_boxes;
     struct MonsterVisual {
@@ -312,7 +378,7 @@ void drawScene(const Room& room,
         const bool moved = (dx != 0 || dy != 0);
         anim.dir = dirFromFacingInt(m.facing, anim.dir);
         const float attack_t = updateAttackTimer(scene_state, key, m.attack_anim_seq, dt);
-        updateCombatOutcomeFxState(scene_state, key, m.combat_outcome_seq, m.combat_outcome, m.combat_value, dt);
+        updateCombatOutcomeFxState(scene_state, key, m.combat_outcome_seq, m.combat_outcome, m.combat_value, dt, monster_fx_delay);
         const bool action_active = target_in_range && (m.id == game_state.attack_target_monster_id);
         tickAnimation(anim, *mon_sprites, moved, action_active || attack_t > 0.0f, dt);
         prev = {m.x, m.y};
@@ -365,9 +431,21 @@ void drawScene(const Room& room,
         const int dx = p.x - prev.first;
         const int dy = p.y - prev.second;
         anim.dir = dirFromFacingInt(p.facing, anim.dir);
-        const float attack_t = updateAttackTimer(scene_state, key, p.attack_anim_seq, dt);
+        float swing_duration = 0.35f;
+        if (cfg.swing_defs) {
+            const auto& eq = (p.user == game_state.your_user)
+                ? game_state.your_equipment : p.equipment;
+            const EquippedItemMsg* weap = findWeaponEquipment(eq);
+            if (weap) {
+                std::string st = weap->swing_type;
+                if (st.empty()) st = "sidearm";
+                auto sd_it = cfg.swing_defs->find(st);
+                if (sd_it != cfg.swing_defs->end()) swing_duration = sd_it->second.duration_sec;
+            }
+        }
+        const float attack_t = updateAttackTimer(scene_state, key, p.attack_anim_seq, dt, swing_duration);
         updateCombatOutcomeFxState(scene_state, key, p.combat_outcome_seq, p.combat_outcome, p.combat_value, dt);
-        tickAnimation(anim, sprites, (dx != 0 || dy != 0), attack_t > 0.0f, dt);
+        tickAnimation(anim, sprites, (dx != 0 || dy != 0), false, dt);
         prev = {p.x, p.y};
         const auto [rx, ry] = smoothPos(scene_state.render_pos_by_key,
                                         key, p.x, p.y, dt,
@@ -456,7 +534,38 @@ void drawScene(const Room& room,
             const auto& pv = player_visuals[cmd.idx];
             const auto& p = *pv.msg;
             const Color tint = (p.user == game_state.your_user) ? WHITE : LIGHTGRAY;
+
+            // Resolve weapon swing parameters once for before/after draw
+            auto tryDrawSwing = [&]() {
+                const std::string pkey = "p:" + p.user;
+                auto timer_it = scene_state.attack_fx_timer_by_key.find(pkey);
+                if (timer_it == scene_state.attack_fx_timer_by_key.end() || timer_it->second <= 0.0f || !cfg.swing_defs) return;
+                const auto& eq = (p.user == game_state.your_user)
+                    ? game_state.your_equipment : p.equipment;
+                const EquippedItemMsg* weapon = findWeaponEquipment(eq);
+                if (!weapon || weapon->sprite_tileset.empty() || !item_sheet_view) return;
+                ItemSheetView sheet = item_sheet_view(weapon->sprite_tileset);
+                if (!sheet.sprites || sheet.texture.id == 0) return;
+                const Frame* fr = findFrameForItem(*sheet.sprites, weapon->sprite_name, ClipKind::Move);
+                if (!fr) return;
+                std::string st = weapon->swing_type;
+                if (st.empty()) st = "sidearm";
+                auto sd_it = cfg.swing_defs->find(st);
+                SwingDef swing;
+                if (sd_it != cfg.swing_defs->end()) swing = sd_it->second;
+                const float progress = 1.0f - (timer_it->second / swing.duration_sec);
+                const float cx = pv.rx * tile_w + tile_w * 0.5f;
+                const float cy = pv.ry * tile_h + tile_h * 0.5f;
+                drawItemSwing(cx, cy, pv.anim->dir,
+                              std::clamp(progress, 0.0f, 1.0f),
+                              swing, fr->rect(), sheet.texture,
+                              tile_w, tile_h, cfg.map_scale);
+            };
+
+            // Draw swing under character for N/E/W, over for S
+            if (pv.anim->dir != Dir::S) tryDrawSwing();
             drawActor(sprites, character_tex, *pv.anim, pv.rx, pv.ry, tile_w, tile_h, cfg.map_scale, tint);
+            if (pv.anim->dir == Dir::S) tryDrawSwing();
         }
     }
 

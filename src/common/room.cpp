@@ -256,7 +256,17 @@ bool Room::parseTmxDoc(XMLDocument& doc) {
         const char* src = ts->Attribute("source");
         if (!src || r.first_gid <= 0) return false;
 
-        r.source_tsx = std::filesystem::path(src).filename().string();;
+        // Extract path relative to game/assets/art/ (e.g. "monsters/slime.tsx")
+        {
+            const std::string src_str(src);
+            const std::string marker = "game/assets/art/";
+            auto pos = src_str.find(marker);
+            if (pos != std::string::npos) {
+                r.source_tsx = src_str.substr(pos + marker.size());
+            } else {
+                r.source_tsx = std::filesystem::path(src).filename().string();
+            }
+        }
         tilesets_.push_back(std::move(r));
         ts_walk_props.push_back(loadWalkableTileProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx));
         auto mon_props = loadTileStringProps(std::filesystem::path("game/assets/art/") / tilesets_.back().source_tsx, "monster_name");
