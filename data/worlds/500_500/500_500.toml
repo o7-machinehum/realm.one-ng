@@ -1,6 +1,0 @@
-name = "500_500"
-display_name = "Center World"
-pvp_enabled = false
-starting_room = "0.tmx"
-starting_x = 2
-starting_y = 2

@@ -1,6 +1,0 @@
-name = "500_501"
-display_name = "North World"
-pvp_enabled = false
-starting_room = "0.tmx"
-starting_x = 2
-starting_y = 2

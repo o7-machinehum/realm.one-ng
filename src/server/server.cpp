@@ -1,42 +1,30 @@
-#include "enet_compat.h"
+#include "voxel_world.h"
 
 #include <chrono>
-#include <iostream>
-#include <thread>
+#include <cstdio>
 #include <string>
-
-#include "auth_db.h"
-#include "msg.h"
-#include "net_server.h"
-#include "world.h"
+#include <thread>
 
 int main(int argc, char** argv) {
-    if (enet_initialize() != 0) {
-        std::cerr << "ERROR: enet_initialize failed\n";
-        return 1;
-    }
-
+    std::string world_path = "data/world.dat";
     uint16_t port = 7000;
-    if (argc >= 2) {
-        port = static_cast<uint16_t>(std::stoi(argv[1]));
-    }
+    if (argc >= 2) world_path = argv[1];
+    if (argc >= 3) port = static_cast<uint16_t>(std::stoi(argv[2]));
 
-    World world("data/worlds");
-
-    try {
-        AuthDb auth_db("data/game.db");
-        NetServer ns(world, auth_db, port);
-        ns.start();
-
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "server startup failed: " << e.what() << "\n";
-        enet_deinitialize();
+    voxel::World world;
+    std::string err;
+    if (!voxel::load(world, world_path, &err)) {
+        std::fprintf(stderr, "FATAL: failed to load %s: %s\n", world_path.c_str(), err.c_str());
         return 1;
     }
+    std::printf("loaded %s  (%ux%ux%u, %zu cube defs)\n",
+                world_path.c_str(),
+                world.header.size_x, world.header.size_y, world.header.size_z,
+                world.defs.size());
+    std::printf("server stub idling on port %u (networking snubbed)\n", port);
 
-    enet_deinitialize();
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
     return 0;
 }

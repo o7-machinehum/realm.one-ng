@@ -5,105 +5,43 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_SERVER "Build the server executable" ON)
+option(BUILD_VIEWER "Build the standalone cube viewer" ON)
 
-find_package(raylib REQUIRED)
-find_package(tinyxml2 REQUIRED)
-find_package(cereal REQUIRED)
-find_package(OpenSSL REQUIRED)
-
-# ENet doesn't have a CMake config, use pkg-config
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(ENET REQUIRED libenet)
-if(BUILD_SERVER)
-    pkg_check_modules(SQLITE3 REQUIRED sqlite3)
-endif()
-
-# Shared code
+# ----- Shared common lib (voxel world format)
 add_library(qg_common
-  src/common/auth_crypto.cpp
-  src/common/sprites.cpp
-  src/common/room.cpp
-  src/common/entity.cpp
-  src/common/string_util.cpp
-  src/client/room_render.cpp
+  src/common/voxel_world.cpp
 )
-
 target_include_directories(qg_common PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 
-target_link_libraries(qg_common PUBLIC
-  tinyxml2::tinyxml2
-  OpenSSL::Crypto
+# ----- Worldgen tool
+find_package(tinyxml2 REQUIRED)
+add_executable(worldgen
+  src/worldgen/worldgen.cpp
 )
+target_link_libraries(worldgen PRIVATE qg_common tinyxml2::tinyxml2)
 
-# ----- Client
-add_executable(client
-    src/client/client.cpp
-    src/client/auth_ui.cpp
-    src/client/client_game_ui.cpp
-    src/client/client_ui_primitives.cpp
-    src/client/client_layout.cpp
-    src/client/client_support.cpp
-    src/client/ui_settings.cpp
-    src/client/local_keys.cpp
-    src/client/client_sheet_cache.cpp
-    src/client/client_scene_renderer.cpp
-    src/client/client_windows.cpp
-    src/client/client_hud.cpp
-    src/client/client_inventory_overlay.cpp
-    src/client/container_def.cpp
-    src/client/net_client.cpp
-    src/client/speech_bubble.cpp
-    src/client/combat_fx.cpp
-    src/server/monster_defs.cpp
-)
+# ----- Standalone cube viewer (renders a world.dat file; no networking)
+if(BUILD_VIEWER)
+    find_package(raylib REQUIRED)
+    add_executable(viewer
+        src/viewer/viewer.cpp
+        src/viewer/cube_renderer.cpp
+    )
+    target_link_libraries(viewer PRIVATE qg_common raylib)
+    target_include_directories(viewer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/viewer
+    )
+endif()
 
-target_link_libraries(client PRIVATE
-    ${ENET_LINK_LIBRARIES}
-    qg_common
-    raylib
-)
-
-target_include_directories(client PRIVATE
-    ${ENET_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
-)
-
+# ----- Server (world loader stub; networking will be re-added later)
 if(BUILD_SERVER)
-# ----- Server
-add_executable(server
-    src/server/server.cpp
-    src/server/net_server.cpp
-    src/server/server_util.cpp
-    src/server/server_occupancy.cpp
-    src/server/server_spawning.cpp
-    src/server/server_msg_handlers.cpp
-    src/server/server_tick.cpp
-    src/server/world.cpp
-    src/server/monster_defs.cpp
-    src/server/npc_defs.cpp
-    src/server/global_settings.cpp
-    src/server/item_defs.cpp
-    src/server/auth_db.cpp
-    src/server/combat.cpp
-    src/server/equipment.cpp
-)
-
-target_link_libraries(server PRIVATE
-    ${ENET_LINK_LIBRARIES}
-    ${SQLITE3_LINK_LIBRARIES}
-    qg_common
-    raylib
-)
-
-target_include_directories(server PRIVATE
-    ${ENET_INCLUDE_DIRS}
-    ${SQLITE3_INCLUDE_DIRS}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
-)
+    add_executable(server
+        src/server/server.cpp
+    )
+    target_link_libraries(server PRIVATE qg_common)
+    target_include_directories(server PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+    )
 endif()
