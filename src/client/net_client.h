@@ -1,32 +1,49 @@
 #pragma once
 
-#include "enet_compat.h"
-#include <thread>
-#include <atomic>
+#include "net_msgs.h"
 
-#include "msg.h"
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <variant>
+
+namespace netc {
+
+struct WelcomeEvent {
+    uint32_t your_id;
+    uint32_t world_size_x;
+    uint32_t world_size_y;
+    uint32_t world_size_z;
+};
+
+using IncomingMsg = std::variant<
+    WelcomeEvent,
+    net::LoginResultEvent,
+    net::PlayerSnapshot,
+    net::PlayerLeaveEvent
+>;
 
 class NetClient {
 public:
-    NetClient(Mailbox& mailbox, std::string host, uint16_t port)
-        : mailbox_(mailbox), hostname_(host), port_(port)  {}
+    NetClient();
+    ~NetClient();
+    NetClient(const NetClient&) = delete;
+    NetClient& operator=(const NetClient&) = delete;
 
-    void start() {
-        recv_thread_ = std::thread(&NetClient::recvLoop, this);
-    }
+    bool connect(const std::string& host, uint16_t port, int timeout_ms = 3000);
+    void disconnect();
+    bool connected() const;
 
-    void stop() {
-        running_ = false;
-        if (recv_thread_.joinable())
-            recv_thread_.join();
-    }
+    void pump(int timeout_ms = 0);
+    std::optional<IncomingMsg> pop();
+
+    void sendLogin(const net::LoginPayload& payload);
+    void sendMove(int8_t dx, int8_t dy);
 
 private:
-    Mailbox& mailbox_;
-    std::thread recv_thread_;
-    std::atomic<bool> running_{true};
-
-    void recvLoop();
-    std::string hostname_;
-    uint16_t port_;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
+
+} // namespace netc

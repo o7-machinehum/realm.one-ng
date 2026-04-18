@@ -1,160 +1,154 @@
-#include <iostream>
-#include <sstream>
-
 #include "net_client.h"
-#include "msg.h"
-#include "envelope.h"
 
-static void sendWire(ENetPeer* peer,
-                     uint8_t channel,
-                     const std::vector<uint8_t>& wire,
-                     bool reliable = true) {
-    ENetPacket* pkt = enet_packet_create(
-        wire.data(),
-        wire.size(),
-        reliable ? ENET_PACKET_FLAG_RELIABLE : 0
-    );
-    enet_peer_send(peer, channel, pkt);
+#include <enet/enet.h>
+
+#include <cstdio>
+#include <deque>
+
+namespace netc {
+
+namespace {
+
+struct EnetInit {
+    EnetInit()  { enet_initialize(); }
+    ~EnetInit() { enet_deinitialize(); }
+};
+EnetInit g_enet_init;
+
+constexpr int kHostChannels   = 1;
+constexpr int kDisconnectWaitMs = 200;
+constexpr int kDisconnectStepMs = 50;
+
+void destroyPacket(ENetPacket* p) {
+    if (p) enet_packet_destroy(p);
 }
 
-static void die(const char* msg) {
-    std::cerr << "ERROR: " << msg << "\n";
-    std::exit(1);
+ENetPacket* makePacket(const std::vector<uint8_t>& bytes, bool reliable) {
+    return enet_packet_create(bytes.data(), bytes.size(),
+                              reliable ? ENET_PACKET_FLAG_RELIABLE : 0);
 }
 
-void NetClient::recvLoop() {
-    ENetHost* client = enet_host_create(nullptr, 1, 2, 0, 0);
-    if (!client) die("enet_host_create(client) failed");
+} // namespace
+
+struct NetClient::Impl {
+    ENetHost* host = nullptr;
+    ENetPeer* peer = nullptr;
+    std::deque<IncomingMsg> inbox;
+
+    ~Impl() {
+        if (host) enet_host_destroy(host);
+    }
+
+    void send(const std::vector<uint8_t>& bytes, bool reliable) {
+        if (!peer) return;
+        enet_peer_send(peer, 0, makePacket(bytes, reliable));
+    }
+
+    void enqueueFromPacket(ENetPacket* pkt) {
+        net::Reader r(pkt->data, pkt->dataLength);
+        const auto type = static_cast<net::MsgType>(r.u8());
+        switch (type) {
+        case net::MsgType::Welcome: {
+            uint32_t id, sx, sy, sz;
+            if (net::readWelcome(r, id, sx, sy, sz)) {
+                inbox.emplace_back(WelcomeEvent{id, sx, sy, sz});
+            }
+            break;
+        }
+        case net::MsgType::LoginResult: {
+            net::LoginResultEvent e;
+            if (net::readLoginResult(r, e)) inbox.emplace_back(std::move(e));
+            break;
+        }
+        case net::MsgType::PlayerState: {
+            net::PlayerSnapshot p;
+            if (net::readPlayerState(r, p)) inbox.emplace_back(std::move(p));
+            break;
+        }
+        case net::MsgType::PlayerLeave: {
+            uint32_t id;
+            if (net::readPlayerLeave(r, id)) inbox.emplace_back(net::PlayerLeaveEvent{id});
+            break;
+        }
+        default: break;
+        }
+    }
+
+    void waitForDisconnectAck() {
+        ENetEvent ev;
+        int budget = kDisconnectWaitMs;
+        while (budget > 0 && enet_host_service(host, &ev, kDisconnectStepMs) > 0) {
+            if (ev.type == ENET_EVENT_TYPE_RECEIVE)    destroyPacket(ev.packet);
+            if (ev.type == ENET_EVENT_TYPE_DISCONNECT) break;
+            budget -= kDisconnectStepMs;
+        }
+    }
+};
+
+NetClient::NetClient() : impl_(std::make_unique<Impl>()) {
+    impl_->host = enet_host_create(nullptr, 1, kHostChannels, 0, 0);
+}
+
+NetClient::~NetClient() { disconnect(); }
+
+bool NetClient::connected() const { return impl_->peer != nullptr; }
+
+bool NetClient::connect(const std::string& host_str, uint16_t port, int timeout_ms) {
+    if (!impl_->host) return false;
 
     ENetAddress addr{};
-    if (enet_address_set_host(&addr, hostname_.c_str()) != 0) die("enet_address_set_host failed");
-    addr.port = port_;
+    if (enet_address_set_host(&addr, host_str.c_str()) < 0) return false;
+    addr.port = port;
 
-    ENetPeer* peer = enet_host_connect(client, &addr, 2, 0);
-    if (!peer) die("enet_host_connect failed");
+    ENetPeer* peer = enet_host_connect(impl_->host, &addr, kHostChannels, 0);
+    if (!peer) return false;
 
-    std::cout << "[client] connecting to " << hostname_ << ":" << port_ << "...\n";
-
-    // Wait for connect (3s timeout)
-    {
-        ENetEvent ev{};
-        if (enet_host_service(client, &ev, 3000) <= 0 || ev.type != ENET_EVENT_TYPE_CONNECT) {
-            enet_peer_reset(peer);
-            die("connect timeout");
-        }
+    ENetEvent ev;
+    if (enet_host_service(impl_->host, &ev, timeout_ms) > 0
+        && ev.type == ENET_EVENT_TYPE_CONNECT) {
+        impl_->peer = peer;
+        return true;
     }
-
-    std::cout << "[client] connected\n";
-    enet_host_flush(client);
-
-    while (running_) {
-        // Check mailbox for outgoing Login message
-        if (auto login = mailbox_.pop<LoginMsg>(MsgType::Login)) {
-            auto wire = pack(MsgType::Login, *login);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto move = mailbox_.pop<MoveMsg>(MsgType::Move)) {
-            auto wire = pack(MsgType::Move, *move);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto chat = mailbox_.pop<ChatMsg>(MsgType::ChatSend)) {
-            auto wire = pack(MsgType::Chat, *chat);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto rot = mailbox_.pop<RotateMsg>(MsgType::Rotate)) {
-            auto wire = pack(MsgType::Rotate, *rot);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto atk = mailbox_.pop<AttackMsg>(MsgType::Attack)) {
-            auto wire = pack(MsgType::Attack, *atk);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto pick = mailbox_.pop<PickupMsg>(MsgType::Pickup)) {
-            auto wire = pack(MsgType::Pickup, *pick);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto drop = mailbox_.pop<DropMsg>(MsgType::Drop)) {
-            auto wire = pack(MsgType::Drop, *drop);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto swp = mailbox_.pop<InventorySwapMsg>(MsgType::InventorySwap)) {
-            auto wire = pack(MsgType::InventorySwap, *swp);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto eq = mailbox_.pop<SetEquipmentMsg>(MsgType::SetEquipment)) {
-            auto wire = pack(MsgType::SetEquipment, *eq);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-        if (auto mv = mailbox_.pop<MoveGroundItemMsg>(MsgType::MoveGroundItem)) {
-            auto wire = pack(MsgType::MoveGroundItem, *mv);
-            sendWire(peer, 0, wire);
-            enet_host_flush(client);
-        }
-
-        ENetEvent ev{};
-        if (enet_host_service(client, &ev, 100) > 0) {
-            if (ev.type == ENET_EVENT_TYPE_RECEIVE) {
-                try {
-                    Envelope env = fromBytes<Envelope>(ev.packet->data, ev.packet->dataLength);
-                    switch (env.type) {
-                        case MsgType::Login:
-                        case MsgType::Move:
-                        case MsgType::ChatSend:
-                        case MsgType::Rotate:
-                        case MsgType::Attack:
-                        case MsgType::Pickup:
-                        case MsgType::Drop:
-                        case MsgType::InventorySwap:
-                        case MsgType::SetEquipment:
-                        case MsgType::MoveGroundItem:
-                            // Client only expects server-originating state/response messages.
-                            break;
-                        case MsgType::Room: {
-                            std::cout << "got a room!";
-                            Room room = fromBytes<Room>(env.payload.data(), env.payload.size());
-                            mailbox_.push(MsgType::Room, std::move(room));
-                            break;
-                        }
-                        case MsgType::Chat: {
-                            ChatMsg chat = fromBytes<ChatMsg>(env.payload.data(), env.payload.size());
-                            mailbox_.push(MsgType::Chat, std::move(chat));
-                            break;
-                        }
-                        case MsgType::LoginResult: {
-                            LoginResultMsg result = fromBytes<LoginResultMsg>(env.payload.data(), env.payload.size());
-                            mailbox_.push(MsgType::LoginResult, std::move(result));
-                            break;
-                        }
-                        case MsgType::GameState: {
-                            GameStateMsg state = fromBytes<GameStateMsg>(env.payload.data(), env.payload.size());
-                            mailbox_.push(MsgType::GameState, std::move(state));
-                            break;
-                        }
-                        default:
-                            break;
-                    }
-                } catch (const std::exception& e) {
-                    std::cerr << "[client] decode error: " << e.what() << "\n";
-                }
-
-                enet_packet_destroy(ev.packet);
-            } else if (ev.type == ENET_EVENT_TYPE_DISCONNECT) {
-                die("disconnected early");
-            }
-        }
-
-    }
-
-    enet_peer_disconnect(peer, 0);
-    enet_host_flush(client);
-    enet_host_destroy(client);
+    enet_peer_reset(peer);
+    return false;
 }
+
+void NetClient::disconnect() {
+    if (!impl_->peer) return;
+    enet_peer_disconnect(impl_->peer, 0);
+    impl_->waitForDisconnectAck();
+    impl_->peer = nullptr;
+}
+
+void NetClient::pump(int timeout_ms) {
+    ENetEvent ev;
+    while (enet_host_service(impl_->host, &ev, timeout_ms) > 0) {
+        timeout_ms = 0;
+        switch (ev.type) {
+        case ENET_EVENT_TYPE_RECEIVE:
+            impl_->enqueueFromPacket(ev.packet);
+            destroyPacket(ev.packet);
+            break;
+        case ENET_EVENT_TYPE_DISCONNECT:
+            impl_->peer = nullptr;
+            break;
+        default: break;
+        }
+    }
+}
+
+std::optional<IncomingMsg> NetClient::pop() {
+    if (impl_->inbox.empty()) return std::nullopt;
+    IncomingMsg msg = std::move(impl_->inbox.front());
+    impl_->inbox.pop_front();
+    return msg;
+}
+
+void NetClient::sendLogin(const net::LoginPayload& payload) {
+    impl_->send(net::writeLogin(payload), true);
+}
+void NetClient::sendMove(int8_t dx, int8_t dy) {
+    impl_->send(net::writeMove(dx, dy), true);
+}
+
+} // namespace netc

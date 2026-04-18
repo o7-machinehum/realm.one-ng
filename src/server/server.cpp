@@ -1,30 +1,30 @@
-#include "voxel_world.h"
+#include "game_server.h"
 
-#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
-#include <thread>
+
+namespace {
+
+void printUsage() {
+    std::printf("server [WORLD_PATH] [PORT]\n"
+                "  defaults: data/world.dat 7000\n");
+}
+
+gs::ServerOptions parseArgs(int argc, char** argv) {
+    gs::ServerOptions opts;
+    if (argc >= 2) opts.world_path = argv[1];
+    if (argc >= 3) opts.port = static_cast<uint16_t>(std::stoi(argv[2]));
+    return opts;
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
-    std::string world_path = "data/world.dat";
-    uint16_t port = 7000;
-    if (argc >= 2) world_path = argv[1];
-    if (argc >= 3) port = static_cast<uint16_t>(std::stoi(argv[2]));
+    if (argc >= 2 && std::string(argv[1]) == "--help") { printUsage(); return 0; }
 
-    voxel::World world;
-    std::string err;
-    if (!voxel::load(world, world_path, &err)) {
-        std::fprintf(stderr, "FATAL: failed to load %s: %s\n", world_path.c_str(), err.c_str());
-        return 1;
-    }
-    std::printf("loaded %s  (%ux%ux%u, %zu cube defs)\n",
-                world_path.c_str(),
-                world.header.size_x, world.header.size_y, world.header.size_z,
-                world.defs.size());
-    std::printf("server stub idling on port %u (networking snubbed)\n", port);
-
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    }
+    gs::GameServer server(parseArgs(argc, argv));
+    if (!server.start()) return 1;
+    server.runForever();
     return 0;
 }

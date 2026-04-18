@@ -1,107 +1,110 @@
 #include "local_keys.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 
-namespace fs = std::filesystem;
-
-namespace client {
+namespace localkey {
 
 namespace {
 
-// Normalizes username text into a filesystem-safe basename.
-std::string safeUserFile(std::string s) {
+namespace fs = std::filesystem;
+
+const char* const kKeyFileExtension = ".key";
+
+bool isAllowedChar(char c) {
+    return (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') ||
+           c == '_' || c == '-';
+}
+
+std::string sanitizeForFilename(std::string s) {
     for (char& c : s) {
-        const bool ok = (c >= 'a' && c <= 'z') ||
-                        (c >= 'A' && c <= 'Z') ||
-                        (c >= '0' && c <= '9') ||
-                        c == '_' || c == '-';
-        if (!ok) c = '_';
+        if (!isAllowedChar(c)) c = '_';
     }
     return s;
 }
 
-// Returns the directory used for local auth key storage.
 fs::path keysDir() {
     return fs::path("data") / "keys";
 }
 
-// Builds the per-user key file path.
-fs::path keyPathForUser(const std::string& username) {
-    return keysDir() / (safeUserFile(username) + ".key");
+fs::path keyPathForUsername(const std::string& username) {
+    return keysDir() / (sanitizeForFilename(username) + kKeyFileExtension);
+}
+
+void setError(std::string* err, const char* msg) {
+    if (err) *err = msg;
+}
+
+bool ensureKeysDir(std::string* err) {
+    std::error_code ec;
+    fs::create_directories(keysDir(), ec);
+    if (ec) { setError(err, "failed to create key dir"); return false; }
+    return true;
+}
+
+bool parseLine(const std::string& line, std::string& key, std::string& value) {
+    const auto eq = line.find('=');
+    if (eq == std::string::npos) return false;
+    key   = line.substr(0, eq);
+    value = line.substr(eq + 1);
+    return true;
 }
 
 } // namespace
 
-// Persists a generated keypair for one local username.
-bool saveLocalKeyPair(const LocalKeyPair& kp, std::string& err) {
-    err.clear();
+bool save(const StoredKey& kp, std::string* err) {
     if (kp.username.empty() || kp.public_key_hex.empty() || kp.private_key_hex.empty()) {
-        err = "missing key fields";
+        setError(err, "missing key fields");
         return false;
     }
+    if (!ensureKeysDir(err)) return false;
 
-    std::error_code ec;
-    fs::create_directories(keysDir(), ec);
-    if (ec) {
-        err = "failed to create key dir";
-        return false;
-    }
+    std::ofstream out(keyPathForUsername(kp.username), std::ios::binary | std::ios::trunc);
+    if (!out) { setError(err, "failed to open key file"); return false; }
 
-    std::ofstream out(keyPathForUser(kp.username), std::ios::binary | std::ios::trunc);
-    if (!out) {
-        err = "failed to open key file";
-        return false;
-    }
-    out << "username=" << kp.username << "\n";
-    out << "public=" << kp.public_key_hex << "\n";
-    out << "private=" << kp.private_key_hex << "\n";
-    return true;
+    out << "username=" << kp.username        << "\n";
+    out << "public="   << kp.public_key_hex  << "\n";
+    out << "private="  << kp.private_key_hex << "\n";
+    return out.good();
 }
 
-// Loads an existing keypair for one local username.
-bool loadLocalKeyPair(const std::string& username, LocalKeyPair& out, std::string& err) {
-    err.clear();
-    out = LocalKeyPair{};
+std::optional<StoredKey> load(const std::string& username, std::string* err) {
+    std::ifstream in(keyPathForUsername(username));
+    if (!in) { setError(err, "key file not found"); return std::nullopt; }
 
-    std::ifstream in(keyPathForUser(username), std::ios::binary);
-    if (!in) {
-        err = "no local key for username";
-        return false;
-    }
-
+    StoredKey kp;
     std::string line;
     while (std::getline(in, line)) {
-        if (line.rfind("username=", 0) == 0) out.username = line.substr(9);
-        else if (line.rfind("public=", 0) == 0) out.public_key_hex = line.substr(7);
-        else if (line.rfind("private=", 0) == 0) out.private_key_hex = line.substr(8);
+        std::string k, v;
+        if (!parseLine(line, k, v)) continue;
+        if      (k == "username") kp.username = v;
+        else if (k == "public")   kp.public_key_hex = v;
+        else if (k == "private")  kp.private_key_hex = v;
     }
-    if (out.username.empty()) out.username = username;
-    if (out.public_key_hex.empty() || out.private_key_hex.empty()) {
-        err = "invalid key file";
-        return false;
+    if (kp.username.empty() || kp.public_key_hex.empty() || kp.private_key_hex.empty()) {
+        setError(err, "incomplete key file");
+        return std::nullopt;
     }
-    return true;
+    return kp;
 }
 
-// Lists all local usernames that currently have stored key files.
-std::vector<std::string> listLocalKeyUsernames() {
+std::vector<std::string> listUsernames() {
     std::vector<std::string> out;
     std::error_code ec;
-    const fs::path dir = keysDir();
-    if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) return out;
-
-    for (const auto& entry : fs::directory_iterator(dir, ec)) {
-        if (ec) break;
+    if (!fs::exists(keysDir(), ec)) return out;
+    for (const auto& entry : fs::directory_iterator(keysDir(), ec)) {
         if (!entry.is_regular_file()) continue;
-        if (entry.path().extension() != ".key") continue;
-        const std::string user = entry.path().stem().string();
-        if (!user.empty()) out.push_back(user);
+        if (entry.path().extension() != kKeyFileExtension) continue;
+        if (auto kp = load(entry.path().stem().string())) {
+            out.push_back(kp->username);
+        }
     }
     std::sort(out.begin(), out.end());
     return out;
 }
 
-} // namespace client
+} // namespace localkey

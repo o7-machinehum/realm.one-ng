@@ -1,52 +1,44 @@
 #pragma once
 
-#include "item_defs.h"
-#include "item_instance.h"
-#include "tile_pos.h"
-
 #include <cstdint>
-#include <map>
+#include <memory>
+#include <optional>
 #include <string>
-#include <vector>
 
-struct sqlite3;
+namespace authdb {
 
-// Data saved to/loaded from the database for each player between sessions.
-struct PersistedPlayer {
-    std::string username;
-    std::string room;                // Qualified room name (e.g. "500_500:0.tmx").
-    int exp = 0;
-    TilePos pos{2, 2};              // Tile position within the room.
-    int melee_xp = 0;
-    int distance_xp = 0;
-    int magic_xp = 0;
-    int shielding_xp = 0;
-    int evasion_xp = 0;
-    std::vector<int64_t> inventory;              // instance IDs
-    std::map<ItemType, int64_t> equipment_by_type; // slot -> instance ID
-    std::vector<ItemInstance> owned_instances;    // all instances owned by player
+struct AuthOutcome {
+    bool        success;
+    std::string message;
 };
 
-// SQLite-backed player authentication and persistence.
+struct PersistedState {
+    int32_t x;
+    int32_t y;
+    int32_t z;
+    uint8_t facing;
+};
+
+// SQLite-backed account directory. Stores username + Ed25519 public key, plus
+// per-player world position. Phase >=2 will add columns (inventory, skills,
+// equipment) via additive migrations.
 class AuthDb {
 public:
-    // Opens (or creates) the SQLite database at db_path, applying schema migrations.
     explicit AuthDb(const std::string& db_path);
     ~AuthDb();
-
     AuthDb(const AuthDb&) = delete;
     AuthDb& operator=(const AuthDb&) = delete;
 
-    // Authenticates or creates a player account using Ed25519 public key.
-    // On success, fills out_player with persisted data and returns true.
-    bool loginWithPublicKey(const std::string& username,
-                            const std::string& public_key_hex,
-                            bool create_account,
-                            PersistedPlayer& out_player,
-                            std::string& message);
-    // Writes the player's current state back to the database.
-    bool savePlayer(const PersistedPlayer& player);
+    AuthOutcome tryLogin(const std::string& username,
+                         const std::string& public_key_hex,
+                         bool create_account);
+
+    std::optional<PersistedState> loadState(const std::string& username);
+    bool saveState(const std::string& username, const PersistedState& state);
 
 private:
-    sqlite3* db_ = nullptr;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
 };
+
+} // namespace authdb

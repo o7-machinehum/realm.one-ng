@@ -5,22 +5,52 @@
 
 namespace voxel {
 
-int World::top_z(uint32_t x, uint32_t y) const {
+namespace {
+
+uint32_t voxelIndex(const WorldHeader& h, uint32_t x, uint32_t y, uint32_t z) {
+    return z * h.size_y * h.size_x + y * h.size_x + x;
+}
+
+void setError(std::string* err, const char* msg) {
+    if (err) *err = msg;
+}
+
+} // namespace
+
+bool World::inBoundsXY(int x, int y) const {
+    return x >= 0 && y >= 0
+        && x < static_cast<int>(header.size_x)
+        && y < static_cast<int>(header.size_y);
+}
+
+bool World::inBounds(int x, int y, int z) const {
+    return inBoundsXY(x, y)
+        && z >= 0 && z < static_cast<int>(header.size_z);
+}
+
+uint16_t World::at(uint32_t x, uint32_t y, uint32_t z) const {
+    return voxels[voxelIndex(header, x, y, z)];
+}
+
+void World::set(uint32_t x, uint32_t y, uint32_t z, uint16_t id) {
+    voxels[voxelIndex(header, x, y, z)] = id;
+}
+
+std::optional<uint32_t> World::topCubeZ(int x, int y) const {
+    if (!inBoundsXY(x, y)) return std::nullopt;
     for (int z = static_cast<int>(header.size_z) - 1; z >= 0; --z) {
-        if (at(x, y, static_cast<uint32_t>(z)) != 0) return z;
+        if (at(x, y, static_cast<uint32_t>(z)) != kAirCubeId) {
+            return static_cast<uint32_t>(z);
+        }
     }
-    return -1;
+    return std::nullopt;
 }
 
 void resize(World& w, uint32_t size_x, uint32_t size_y, uint32_t size_z) {
     w.header.size_x = size_x;
     w.header.size_y = size_y;
     w.header.size_z = size_z;
-    w.voxels.assign(static_cast<size_t>(size_x) * size_y * size_z, 0);
-}
-
-static void setError(std::string* err, const char* msg) {
-    if (err) *err = msg;
+    w.voxels.assign(static_cast<size_t>(size_x) * size_y * size_z, kAirCubeId);
 }
 
 bool save(const World& w, const std::string& path, std::string* err) {

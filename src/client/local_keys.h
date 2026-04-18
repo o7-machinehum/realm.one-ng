@@ -1,18 +1,21 @@
 #pragma once
 
+#include "auth_crypto.h"
+
+#include <optional>
 #include <string>
 #include <vector>
 
-namespace client {
+namespace localkey {
 
-struct LocalKeyPair {
+struct StoredKey {
     std::string username;
     std::string public_key_hex;
     std::string private_key_hex;
 };
 
-bool saveLocalKeyPair(const LocalKeyPair& kp, std::string& err);
-bool loadLocalKeyPair(const std::string& username, LocalKeyPair& out, std::string& err);
-std::vector<std::string> listLocalKeyUsernames();
+bool save(const StoredKey& kp, std::string* err = nullptr);
+std::optional<StoredKey> load(const std::string& username, std::string* err = nullptr);
+std::vector<std::string> listUsernames();
 
-} // namespace client
+} // namespace localkey
